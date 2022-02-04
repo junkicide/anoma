@@ -1,6 +1,7 @@
 //! Implementation of the `FinalizeBlock` ABCI++ method for the Shell
 
 use anoma::types::storage::BlockHash;
+use anoma::types::key::*;
 #[cfg(not(feature = "ABCI"))]
 use tendermint::block::Header;
 #[cfg(not(feature = "ABCI"))]
@@ -302,10 +303,10 @@ where
                     (consensus_key, power)
                 }
             };
-            let consensus_key: ed25519_dalek::PublicKey = consensus_key.into();
+            let consensus_key: ed25519c::PublicKey = consensus_key.into();
             let pub_key = TendermintPublicKey {
                 sum: Some(public_key::Sum::Ed25519(
-                    consensus_key.to_bytes().to_vec(),
+                    consensus_key.into_ref().to_vec(),
                 )),
             };
             let pub_key = Some(pub_key);

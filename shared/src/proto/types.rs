@@ -8,7 +8,7 @@ use prost::Message;
 use thiserror::Error;
 
 use super::generated::types;
-use crate::types::key::ed25519::{self, Keypair};
+use crate::types::key::*;
 use crate::types::time::DateTimeUtc;
 
 #[derive(Error, Debug)]
@@ -83,8 +83,39 @@ impl Tx {
         bytes
     }
 
-    pub fn sign(self, keypair: &Keypair) -> Tx {
-        ed25519::sign_tx(keypair, self)
+    /// Sign a transaction using [`SignedTxData`].
+    pub fn sign<S: SigScheme>(self, keypair: &S::Keypair) -> Self {
+        let to_sign = self.to_bytes();
+        let sig = S::sign(keypair, &to_sign);
+        let signed = SignedTxData::<S> { data: self.data, sig }
+            .try_to_vec()
+            .expect("Encoding transaction data shouldn't fail");
+        Tx {
+            code: self.code,
+            data: Some(signed),
+            timestamp: self.timestamp,
+        }
+    }
+
+    /// Verify that the transaction has been signed by the secret key
+    /// counterpart of the given public key.
+    pub fn verify_sig<S: SigScheme>(
+        &self,
+        pk: &S::PublicKey,
+        sig: &S::Signature,
+    ) -> std::result::Result<(), VerifySigError> {
+        // Try to get the transaction data from decoded `SignedTxData`
+        let tx_data = self.data.clone().ok_or(VerifySigError::MissingData)?;
+        let signed_tx_data = SignedTxData::<S>::try_from_slice(&tx_data[..])
+            .expect("Decoding transaction data shouldn't fail");
+        let data = signed_tx_data.data;
+        let tx = Tx {
+            code: self.code.clone(),
+            data,
+            timestamp: self.timestamp,
+        };
+        let signed_data = tx.to_bytes();
+        S::verify_signature_raw(pk, &signed_data, sig)
     }
 }
 

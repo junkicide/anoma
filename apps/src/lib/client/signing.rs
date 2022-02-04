@@ -4,7 +4,7 @@
 use std::rc::Rc;
 
 use anoma::types::address::{Address, ImplicitAddress};
-use anoma::types::key::ed25519::Keypair;
+use anoma::types::key::*;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
@@ -20,7 +20,7 @@ pub async fn find_keypair(
     wallet: &mut Wallet,
     addr: &Address,
     ledger_address: TendermintAddress,
-) -> Rc<Keypair> {
+) -> Rc<ed25519c::Keypair> {
     match addr {
         Address::Established(_) => {
             println!(

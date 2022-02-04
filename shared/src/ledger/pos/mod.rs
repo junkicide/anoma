@@ -48,7 +48,7 @@ pub fn init_genesis_storage<'a, DB, H>(
 /// Alias for a PoS type with the same name with concrete type parameters
 pub type ValidatorConsensusKeys =
     anoma_proof_of_stake::types::ValidatorConsensusKeys<
-        key::ed25519::PublicKey,
+        key::ed25519c::PublicKey,
     >;
 
 /// Alias for a PoS type with the same name with concrete type parameters
@@ -71,7 +71,7 @@ pub type BondId = anoma_proof_of_stake::types::BondId<Address>;
 pub type GenesisValidator = anoma_proof_of_stake::types::GenesisValidator<
     Address,
     token::Amount,
-    key::ed25519::PublicKey,
+    key::ed25519c::PublicKey,
 >;
 
 impl From<Epoch> for anoma_proof_of_stake::types::Epoch {

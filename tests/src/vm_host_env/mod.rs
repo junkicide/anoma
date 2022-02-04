@@ -24,7 +24,7 @@ mod tests {
     use anoma::ledger::ibc::handler::IbcActions;
     use anoma::ledger::ibc::vp::Error as IbcError;
     use anoma::proto::Tx;
-    use anoma::types::key::ed25519::SignedTxData;
+    use anoma::types::key::*;
     use anoma::types::storage::{self, Key, KeySeg};
     use anoma::types::time::DateTimeUtc;
     use anoma::types::token::{self, Amount};
@@ -399,9 +399,9 @@ mod tests {
         let addr = address::testing::established_address_1();
 
         // Write the public key to storage
-        let pk_key = key::ed25519::pk_key(&addr);
-        let keypair = key::ed25519::testing::keypair_1();
-        let pk = keypair.public.clone();
+        let pk_key = key::pk_key(&addr);
+        let keypair = key::testing::keypair_1();
+        let pk = keypair.public_part().clone();
         env.storage
             .write(&pk_key, pk.try_to_vec().unwrap())
             .unwrap();
@@ -414,22 +414,22 @@ mod tests {
             // Tx without any data
             None,
         ] {
-            env.tx = Tx::new(code.clone(), data.clone()).sign(&keypair);
+            env.tx = Tx::new(code.clone(), data.clone()).sign::<ed25519c::SigScheme>(&keypair);
             // Initialize the environment
             init_vp_env(&mut env);
 
             let tx_data = env.tx.data.expect("data should exist");
             let signed_tx_data =
-                match SignedTxData::try_from_slice(&tx_data[..]) {
+                match SignedTxData::<ed25519c::SigScheme>::try_from_slice(&tx_data[..]) {
                     Ok(data) => data,
                     _ => panic!("decoding failed"),
                 };
             assert_eq!(&signed_tx_data.data, data);
             assert!(vp_host_env::verify_tx_signature(&pk, &signed_tx_data.sig));
 
-            let other_keypair = key::ed25519::testing::keypair_2();
+            let other_keypair = key::testing::keypair_2();
             assert!(!vp_host_env::verify_tx_signature(
-                &other_keypair.public,
+                &other_keypair.public_part(),
                 &signed_tx_data.sig
             ));
         }

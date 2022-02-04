@@ -9,9 +9,7 @@ use anoma::ledger::pos::{GenesisValidator, PosParams};
 use anoma::types::address::Address;
 #[cfg(not(feature = "dev"))]
 use anoma::types::chain::ChainId;
-#[cfg(feature = "dev")]
-use anoma::types::key::ed25519::Keypair;
-use anoma::types::key::ed25519::PublicKey;
+use anoma::types::key::*;
 use anoma::types::time::DateTimeUtc;
 use anoma::types::{storage, token};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -29,7 +27,7 @@ pub mod genesis_config {
     use anoma::ledger::pos::types::BasisPoints;
     use anoma::ledger::pos::{GenesisValidator, PosParams};
     use anoma::types::address::Address;
-    use anoma::types::key::ed25519::{ParsePublicKeyError, PublicKey};
+    use anoma::types::key::*;
     use anoma::types::time::Rfc3339String;
     use anoma::types::{storage, token};
     use hex;
@@ -56,8 +54,8 @@ pub mod genesis_config {
             Ok(array)
         }
 
-        pub fn to_public_key(&self) -> Result<PublicKey, HexKeyError> {
-            let key = PublicKey::from_str(&self.0)?;
+        pub fn to_public_key(&self) -> Result<ed25519c::PublicKey, HexKeyError> {
+            let key = ed25519c::PublicKey::from_str(&self.0)?;
             Ok(key)
         }
     }
@@ -520,7 +518,7 @@ pub struct Validator {
     /// VP will check authorization of transactions from this account against
     /// this key on a transaction signature.
     /// Note that this is distinct from consensus key used in the PoS system.
-    pub account_key: PublicKey,
+    pub account_key: ed25519c::PublicKey,
     /// These tokens are no staked and hence do not contribute to the
     /// validator's voting power
     pub non_staked_balance: token::Amount,
@@ -546,7 +544,7 @@ pub struct EstablishedAccount {
     /// Expected SHA-256 hash of the validity predicate wasm
     pub vp_sha256: [u8; 32],
     /// A public key to be stored in the account's storage, if any
-    pub public_key: Option<PublicKey>,
+    pub public_key: Option<ed25519c::PublicKey>,
     /// Account's sub-space storage. The values must be borsh encoded bytes.
     #[derivative(PartialOrd = "ignore", Ord = "ignore")]
     pub storage: HashMap<storage::Key, Vec<u8>>,
@@ -581,7 +579,7 @@ pub struct TokenAccount {
 pub struct ImplicitAccount {
     /// A public key from which the implicit account is derived. This will be
     /// stored on chain for the account.
-    pub public_key: PublicKey,
+    pub public_key: ed25519c::PublicKey,
 }
 
 #[cfg(not(feature = "dev"))]
@@ -606,7 +604,7 @@ pub fn genesis() -> Genesis {
     // `tests::gen_genesis_validator` below.
     let consensus_keypair = wallet::defaults::validator_keypair();
     let account_keypair = wallet::defaults::validator_keypair();
-    let staking_reward_keypair = Keypair::from_bytes(&[
+    let staking_reward_keypair = <ed25519c::Keypair as TryFromRef<[u8]>>::try_from_ref(&[
         61, 198, 87, 204, 44, 94, 234, 228, 217, 72, 245, 27, 40, 2, 151, 174,
         24, 247, 69, 6, 9, 30, 44, 16, 88, 238, 77, 162, 243, 125, 240, 206,
         111, 92, 66, 23, 105, 211, 33, 236, 5, 208, 17, 88, 177, 112, 100, 154,
@@ -620,10 +618,10 @@ pub fn genesis() -> Genesis {
             address,
             staking_reward_address,
             tokens: token::Amount::whole(200_000),
-            consensus_key: consensus_keypair.public,
-            staking_reward_key: staking_reward_keypair.public,
+            consensus_key: consensus_keypair.public_part(),
+            staking_reward_key: staking_reward_keypair.public_part(),
         },
-        account_key: account_keypair.public,
+        account_key: account_keypair.public_part(),
         non_staked_balance: token::Amount::whole(100_000),
         // TODO replace with https://github.com/anoma/anoma/issues/25)
         validator_vp_code_path: vp_user_path.into(),
@@ -641,32 +639,32 @@ pub fn genesis() -> Genesis {
         address: wallet::defaults::albert_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::albert_keypair().public),
+        public_key: Some(wallet::defaults::albert_keypair().public_part()),
         storage: HashMap::default(),
     };
     let bertha = EstablishedAccount {
         address: wallet::defaults::bertha_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::bertha_keypair().public),
+        public_key: Some(wallet::defaults::bertha_keypair().public_part()),
         storage: HashMap::default(),
     };
     let christel = EstablishedAccount {
         address: wallet::defaults::christel_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::christel_keypair().public),
+        public_key: Some(wallet::defaults::christel_keypair().public_part()),
         storage: HashMap::default(),
     };
     let matchmaker = EstablishedAccount {
         address: wallet::defaults::matchmaker_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::matchmaker_keypair().public),
+        public_key: Some(wallet::defaults::matchmaker_keypair().public_part()),
         storage: HashMap::default(),
     };
     let implicit_accounts = vec![ImplicitAccount {
-        public_key: wallet::defaults::daewon_keypair().public,
+        public_key: wallet::defaults::daewon_keypair().public_part(),
     }];
     let default_user_tokens = token::Amount::whole(1_000_000);
     let default_key_tokens = token::Amount::whole(1_000);
@@ -719,7 +717,7 @@ pub fn genesis() -> Genesis {
 #[cfg(test)]
 pub mod tests {
     use anoma::types::address::testing::gen_established_address;
-    use anoma::types::key::ed25519::Keypair;
+    use anoma::types::key::*;
     use rand::prelude::ThreadRng;
     use rand::thread_rng;
 
@@ -730,14 +728,16 @@ pub mod tests {
         let address = gen_established_address();
         let staking_reward_address = gen_established_address();
         let mut rng: ThreadRng = thread_rng();
-        let keypair = Keypair::generate(&mut rng);
-        let staking_reward_keypair = Keypair::generate(&mut rng);
+        let keypair = ed25519c::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap();
+        let kp_arr: <ed25519c::Keypair as Repr<[u8]>>::T = keypair.into_ref();
+        let staking_reward_keypair = ed25519c::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap();
+        let srkp_arr: <ed25519c::Keypair as Repr<[u8]>>::T = staking_reward_keypair.into_ref();
         println!("address: {}", address);
         println!("staking_reward_address: {}", staking_reward_address);
-        println!("keypair: {:?}", keypair.to_bytes());
+        println!("keypair: {:?}", kp_arr);
         println!(
             "staking_reward_keypair: {:?}",
-            staking_reward_keypair.to_bytes()
+            srkp_arr
         );
     }
 }

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::types::address::Address;
-use crate::types::key::ed25519::Signed;
+use crate::types::key::{Signed, ed25519c};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token;
 
@@ -28,7 +28,7 @@ use crate::types::token;
 )]
 pub struct FungibleTokenIntent {
     /// List of exchange definitions
-    pub exchange: HashSet<Signed<Exchange>>,
+    pub exchange: HashSet<Signed<ed25519c::SigScheme, Exchange>>,
 }
 
 #[derive(
@@ -79,12 +79,12 @@ pub struct MatchedExchanges {
     pub transfers: HashSet<token::Transfer>,
     // TODO benchmark between an map or a set, see which is less costly
     /// The exchanges that were matched
-    pub exchanges: HashMap<Address, Signed<Exchange>>,
+    pub exchanges: HashMap<Address, Signed<ed25519c::SigScheme, Exchange>>,
     /// The intents
     // TODO: refactor this without duplicating stuff. The exchanges in the
     // `exchanges` hashmap are already contained in the FungibleTokenIntents
     // belows
-    pub intents: HashMap<Address, Signed<FungibleTokenIntent>>,
+    pub intents: HashMap<Address, Signed<ed25519c::SigScheme, FungibleTokenIntent>>,
 }
 
 /// These are transfers crafted from matched [`Exchange`]s with a source address
@@ -242,15 +242,15 @@ mod tests {
 
     use super::*;
     use crate::ledger::storage::types::{decode, encode};
-    use crate::types::key::ed25519;
+    use crate::types::key;
 
     #[test]
     fn test_encode_decode_intent_transfer_without_vp() {
         let bertha_addr = Address::from_str(BERTHA).unwrap();
         let albert_addr = Address::from_str(ALBERT).unwrap();
 
-        let bertha_keypair = ed25519::testing::keypair_1();
-        let albert_keypair = ed25519::testing::keypair_2();
+        let bertha_keypair = key::testing::keypair_1();
+        let albert_keypair = key::testing::keypair_2();
 
         let exchange_one = Exchange {
             addr: Address::from_str(BERTHA).unwrap(),
@@ -328,8 +328,8 @@ mod tests {
         let bertha_addr = Address::from_str(BERTHA).unwrap();
         let albert_addr = Address::from_str(ALBERT).unwrap();
 
-        let bertha_keypair = ed25519::testing::keypair_1();
-        let albert_keypair = ed25519::testing::keypair_2();
+        let bertha_keypair = key::testing::keypair_1();
+        let albert_keypair = key::testing::keypair_2();
 
         let working_dir = env::current_dir().unwrap();
 

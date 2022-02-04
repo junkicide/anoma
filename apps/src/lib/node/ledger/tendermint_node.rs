@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use anoma::types::address::Address;
 use anoma::types::chain::ChainId;
-use anoma::types::key::ed25519::Keypair;
+use anoma::types::key::*;
 use anoma::types::time::DateTimeUtc;
 use serde_json::json;
 #[cfg(not(feature = "ABCI"))]
@@ -218,7 +218,7 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
 pub async fn write_validator_key_async(
     home_dir: impl AsRef<Path>,
     address: &Address,
-    consensus_key: &Keypair,
+    consensus_key: &ed25519c::Keypair,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("priv_validator_key.json");
@@ -234,9 +234,10 @@ pub async fn write_validator_key_async(
         .open(&path)
         .await
         .expect("Couldn't create private validator key file");
-    let pk: ed25519_dalek::PublicKey = consensus_key.public.clone().into();
-    let pk = base64::encode(pk.as_bytes());
-    let sk = base64::encode(consensus_key.to_bytes());
+    let pk: ed25519c::PublicKey = consensus_key.public_part();
+    let pk = base64::encode(pk.into_ref().as_ref());
+    let ck_arr: <ed25519c::Keypair as Repr<[u8]>>::T = consensus_key.into_ref();
+    let sk = base64::encode(ck_arr.as_ref());
     let address = address.raw_hash().unwrap();
     let key = json!({
        "address": address,
@@ -260,7 +261,7 @@ pub async fn write_validator_key_async(
 pub fn write_validator_key(
     home_dir: impl AsRef<Path>,
     address: &Address,
-    consensus_key: &Keypair,
+    consensus_key: &ed25519c::Keypair,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("priv_validator_key.json");
@@ -274,9 +275,10 @@ pub fn write_validator_key(
         .truncate(true)
         .open(&path)
         .expect("Couldn't create private validator key file");
-    let pk: ed25519_dalek::PublicKey = consensus_key.public.clone().into();
-    let pk = base64::encode(pk.as_bytes());
-    let sk = base64::encode(consensus_key.to_bytes());
+    let pk: ed25519c::PublicKey = consensus_key.public_part();
+    let pk = base64::encode(pk.into_ref());
+    let ck_arr: <ed25519c::Keypair as Repr<[u8]>>::T = consensus_key.into_ref();
+    let sk = base64::encode(ck_arr.as_ref());
     let address = address.raw_hash().unwrap();
     let key = json!({
        "address": address,

@@ -477,7 +477,7 @@ mod test_utils {
     use anoma::ledger::storage::mockdb::MockDB;
     use anoma::ledger::storage::{BlockStateWrite, MerkleTree, Sha256Hasher};
     use anoma::types::address::{xan, EstablishedAddressGen};
-    use anoma::types::key::ed25519::Keypair;
+    use anoma::types::key::*;
     use anoma::types::storage::{BlockHash, Epoch};
     use anoma::types::transaction::Fee;
     use tempfile::tempdir;
@@ -512,12 +512,12 @@ mod test_utils {
     }
 
     /// Generate a random public/private keypair
-    pub(super) fn gen_keypair() -> Keypair {
+    pub(super) fn gen_keypair() -> ed25519c::Keypair {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
         let mut rng: ThreadRng = thread_rng();
-        Keypair::generate(&mut rng)
+        ed25519c::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap()
     }
 
     /// A wrapper around the shell that implements

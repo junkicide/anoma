@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::io::Write;
 
 use anoma::types::intent::{Exchange, FungibleTokenIntent};
-use anoma::types::key::ed25519::Signed;
+use anoma::types::key::*;
 use borsh::BorshSerialize;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_config::net::Address as TendermintAddress;
@@ -29,7 +29,7 @@ pub async fn gossip_intent(
         to_stdout,
     }: args::Intent,
 ) {
-    let mut signed_exchanges: HashSet<Signed<Exchange>> =
+    let mut signed_exchanges: HashSet<Signed<ed25519c::SigScheme, Exchange>> =
         HashSet::with_capacity(exchanges.len());
     for exchange in exchanges {
         let signed =
@@ -53,8 +53,8 @@ pub async fn gossip_intent(
             .await
         }
     };
-    let signed_ft: Signed<FungibleTokenIntent> = Signed::new(
-        &source_keypair,
+    let signed_ft: Signed<ed25519c::SigScheme, FungibleTokenIntent> = Signed::new(
+        &*source_keypair,
         FungibleTokenIntent {
             exchange: signed_exchanges,
         },
@@ -112,8 +112,8 @@ async fn sign_exchange(
     wallet: &mut Wallet,
     exchange: Exchange,
     ledger_address: TendermintAddress,
-) -> Signed<Exchange> {
+) -> Signed<ed25519c::SigScheme, Exchange> {
     let source_keypair =
         signing::find_keypair(wallet, &exchange.addr, ledger_address).await;
-    Signed::new(&source_keypair, exchange.clone())
+    Signed::new(&*source_keypair, exchange.clone())
 }
