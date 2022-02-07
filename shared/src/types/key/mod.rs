@@ -151,6 +151,15 @@ pub trait Signature : Hash
     + Repr<[u8]> {
         /// The scheme type of this implementation
         const TYPE: SchemeType;
+        /// Convert from one Signature type to another
+        fn try_from_sig<PK: Signature>(pk: &PK) -> Result<Self, ParseSignatureError> {
+            if PK::TYPE == Self::TYPE {
+                let kpu8: <PK as Repr<[u8]>>::T = pk.into_ref();
+                Self::try_from_ref(kpu8.as_ref())
+            } else {
+                Err(ParseSignatureError::MismatchedScheme)
+            }
+        }
     }
 
 /// Represents a public key
@@ -171,6 +180,14 @@ pub trait PublicKey : BorshSerialize
     + Sync {
         /// The scheme type of this implementation
         const TYPE: SchemeType;
+        /// Convert from one PublicKey type to another
+        fn try_from_pk<QP: PublicKey>(pk: &QP) -> Result<Self, ParsePublicKeyError> {
+            if Self::TYPE == QP::TYPE {
+                Self::try_from_ref(pk.into_ref().as_ref())
+            } else {
+                Err(ParsePublicKeyError::MismatchedScheme)
+            }
+        }
     }
 
 /// Represents a secret key
@@ -185,6 +202,14 @@ pub trait SecretKey : BorshSerialize
     + Clone {
         /// The scheme type of this implementation
         const TYPE: SchemeType;
+        /// Convert from one SecretKey type to another
+        fn try_from_sk<PK: SecretKey>(pk: &PK) -> Result<Self, ParseSecretKeyError> {
+            if PK::TYPE == Self::TYPE {
+                Self::try_from_ref(pk.into_ref().as_ref())
+            } else {
+                Err(ParseSecretKeyError::MismatchedScheme)
+            }
+        }
     }
 
 /// Represents a keypair
@@ -215,6 +240,15 @@ pub trait Keypair : Display
         /// Get the secret part of a given key pair
         fn secret_part(&self) -> Self::SecretKey {
             IntoRef::<(Self::PublicKey, Self::SecretKey)>::into_ref(self).1
+        }
+        /// Convert from one Keypair type to another
+        fn try_from_kp<PK: Keypair>(pk: &PK) -> Result<Self, ParseKeypairError> {
+            if PK::TYPE == Self::TYPE {
+                let kpu8: <PK as Repr<[u8]>>::T = pk.into_ref();
+                Self::try_from_ref(kpu8.as_ref())
+            } else {
+                Err(ParseKeypairError::MismatchedScheme)
+            }
         }
     }
 
@@ -265,44 +299,6 @@ pub type SecretKeyRep<S> = <<S as SigScheme>::SecretKey as Repr<[u8]>>::T;
 pub type SignatureRep<S> = <<S as SigScheme>::Signature as Repr<[u8]>>::T;
 /// Shorthand to access byte array type that can represent keypair
 pub type KeypairRep<S> = <<S as SigScheme>::Keypair as Repr<[u8]>>::T;
-
-/// Convert from one PublicKey type to another
-pub fn try_from_pk<PK: PublicKey, QP: PublicKey>(pk: &PK) -> Result<QP, ParsePublicKeyError> {
-    if PK::TYPE == QP::TYPE {
-        QP::try_from_ref(pk.into_ref().as_ref())
-    } else {
-        Err(ParsePublicKeyError::MismatchedScheme)
-    }
-}
-
-/// Convert from one SecretKey type to another
-pub fn try_from_sk<PK: SecretKey, QP: SecretKey>(pk: &PK) -> Result<QP, ParseSecretKeyError> {
-    if PK::TYPE == QP::TYPE {
-        QP::try_from_ref(pk.into_ref().as_ref())
-    } else {
-        Err(ParseSecretKeyError::MismatchedScheme)
-    }
-}
-
-/// Convert from one Keypair type to another
-pub fn try_from_kp<PK: Keypair, QP: Keypair>(pk: &PK) -> Result<QP, ParseKeypairError> {
-    if PK::TYPE == QP::TYPE {
-        let kpu8: <PK as Repr<[u8]>>::T = pk.into_ref();
-        QP::try_from_ref(kpu8.as_ref())
-    } else {
-        Err(ParseKeypairError::MismatchedScheme)
-    }
-}
-
-/// Convert from one Signature type to another
-pub fn try_from_sig<PK: Signature, QP: Signature>(pk: &PK) -> Result<QP, ParseSignatureError> {
-    if PK::TYPE == QP::TYPE {
-        let kpu8: <PK as Repr<[u8]>>::T = pk.into_ref();
-        QP::try_from_ref(kpu8.as_ref())
-    } else {
-        Err(ParseSignatureError::MismatchedScheme)
-    }
-}
 
 /// This can be used to sign an arbitrary tx. The signature is produced and
 /// verified on the tx data concatenated with the tx code, however the tx code
