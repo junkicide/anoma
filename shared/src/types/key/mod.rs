@@ -181,8 +181,8 @@ pub trait PublicKey : BorshSerialize
         /// The scheme type of this implementation
         const TYPE: SchemeType;
         /// Convert from one PublicKey type to another
-        fn try_from_pk<QP: PublicKey>(pk: &QP) -> Result<Self, ParsePublicKeyError> {
-            if Self::TYPE == QP::TYPE {
+        fn try_from_pk<PK: PublicKey>(pk: &PK) -> Result<Self, ParsePublicKeyError> {
+            if Self::TYPE == PK::TYPE {
                 Self::try_from_ref(pk.into_ref().as_ref())
             } else {
                 Err(ParsePublicKeyError::MismatchedScheme)

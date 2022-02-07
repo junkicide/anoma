@@ -41,6 +41,17 @@ const PUBLIC_KEY_LENGTH: usize = 1 +
 
 impl super::PublicKey for PublicKey {
     const TYPE: SchemeType = SigScheme::TYPE;
+    fn try_from_pk<PK: super::PublicKey>(pk: &PK) -> Result<Self, ParsePublicKeyError> {
+        if PK::TYPE == Self::TYPE {
+            Self::try_from_ref(pk.into_ref().as_ref())
+        } else if PK::TYPE == ed25519c::PublicKey::TYPE {
+            Ok(Self::Ed25519(ed25519c::PublicKey::try_from_ref(pk.into_ref().as_ref())?))
+        } else if PK::TYPE == secp256k1::PublicKey::TYPE {
+            Ok(Self::Secp256k1(secp256k1::PublicKey::try_from_ref(pk.into_ref().as_ref())?))
+        } else {
+            Err(ParsePublicKeyError::MismatchedScheme)
+        }
+    }
 }
 
 impl Repr<[u8]> for PublicKey {
@@ -93,6 +104,17 @@ const SECRET_KEY_LENGTH: usize = 1 +
 
 impl super::SecretKey for SecretKey {
     const TYPE: SchemeType = SigScheme::TYPE;
+    fn try_from_sk<PK: super::SecretKey>(pk: &PK) -> Result<Self, ParseSecretKeyError> {
+        if PK::TYPE == Self::TYPE {
+            Self::try_from_ref(pk.into_ref().as_ref())
+        } else if PK::TYPE == ed25519c::SecretKey::TYPE {
+            Ok(Self::Ed25519(ed25519c::SecretKey::try_from_ref(pk.into_ref().as_ref())?))
+        } else if PK::TYPE == secp256k1::SecretKey::TYPE {
+            Ok(Self::Secp256k1(secp256k1::SecretKey::try_from_ref(pk.into_ref().as_ref())?))
+        } else {
+            Err(ParseSecretKeyError::MismatchedScheme)
+        }
+    }
 }
 
 impl Repr<[u8]> for SecretKey {
@@ -154,6 +176,17 @@ const SIGNATURE_LENGTH: usize = 1 +
 
 impl super::Signature for Signature {
     const TYPE: SchemeType = SigScheme::TYPE;
+    fn try_from_sig<PK: super::Signature>(pk: &PK) -> Result<Self, ParseSignatureError> {
+        if PK::TYPE == Self::TYPE {
+            Self::try_from_ref(pk.into_ref().as_ref())
+        } else if PK::TYPE == ed25519c::Signature::TYPE {
+            Ok(Self::Ed25519(ed25519c::Signature::try_from_ref(pk.into_ref().as_ref())?))
+        } else if PK::TYPE == secp256k1::Signature::TYPE {
+            Ok(Self::Secp256k1(secp256k1::Signature::try_from_ref(pk.into_ref().as_ref())?))
+        } else {
+            Err(ParseSignatureError::MismatchedScheme)
+        }
+    }
 }
 
 impl Repr<[u8]> for Signature {
@@ -194,6 +227,18 @@ impl super::Keypair for Keypair {
     const TYPE: SchemeType = SigScheme::TYPE;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
+    fn try_from_kp<PK: super::Keypair>(pk: &PK) -> Result<Self, ParseKeypairError> {
+        let buf: PK::T = pk.into_ref();
+        if PK::TYPE == Self::TYPE {
+            Self::try_from_ref(buf.as_ref())
+        } else if PK::TYPE == ed25519c::Keypair::TYPE {
+            Ok(Self::Ed25519(ed25519c::Keypair::try_from_ref(buf.as_ref())?))
+        } else if PK::TYPE == secp256k1::Keypair::TYPE {
+            Ok(Self::Secp256k1(secp256k1::Keypair::try_from_ref(buf.as_ref())?))
+        } else {
+            Err(ParseKeypairError::MismatchedScheme)
+        }
+    }
 }
 
 impl Repr<[u8]> for Keypair {
