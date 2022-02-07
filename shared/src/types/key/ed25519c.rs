@@ -20,6 +20,19 @@ pub struct PublicKey(pub ed25519_consensus::VerificationKey);
 
 impl super::PublicKey for PublicKey {
     const TYPE: SchemeType = SigScheme::TYPE;
+
+    fn try_from_pk<PK: super::PublicKey>(pk: &PK) -> Result<Self, ParsePublicKeyError> {
+        if PK::TYPE == super::common::PublicKey::TYPE {
+            super::common::PublicKey::try_from_pk(pk).and_then(|x| match x {
+                super::common::PublicKey::Ed25519(epk) => Ok(epk),
+                _ => Err(ParsePublicKeyError::MismatchedScheme)
+            })
+        } else if PK::TYPE == Self::TYPE {
+            Self::try_from_ref(pk.into_ref().as_ref())
+        } else {
+            Err(ParsePublicKeyError::MismatchedScheme)
+        }
+    }
 }
 
 impl Repr<[u8]> for PublicKey {
@@ -100,6 +113,19 @@ pub struct SecretKey(pub ed25519_consensus::SigningKey);
 
 impl super::SecretKey for SecretKey {
     const TYPE: SchemeType = SigScheme::TYPE;
+
+    fn try_from_sk<PK: super::SecretKey>(pk: &PK) -> Result<Self, ParseSecretKeyError> {
+        if PK::TYPE == super::common::SecretKey::TYPE {
+            super::common::SecretKey::try_from_sk(pk).and_then(|x| match x {
+                super::common::SecretKey::Ed25519(epk) => Ok(epk),
+                _ => Err(ParseSecretKeyError::MismatchedScheme)
+            })
+        } else if PK::TYPE == Self::TYPE {
+            Self::try_from_ref(pk.into_ref().as_ref())
+        } else {
+            Err(ParseSecretKeyError::MismatchedScheme)
+        }
+    }
 }
 
 impl Clone for SecretKey {
@@ -162,6 +188,20 @@ impl super::Keypair for Keypair {
     const TYPE: SchemeType = SigScheme::TYPE;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
+
+    fn try_from_kp<PK: super::Keypair>(pk: &PK) -> Result<Self, ParseKeypairError> {
+        if PK::TYPE == super::common::Keypair::TYPE {
+            super::common::Keypair::try_from_kp(pk).and_then(|x| match x {
+                super::common::Keypair::Ed25519(epk) => Ok(epk),
+                _ => Err(ParseKeypairError::MismatchedScheme)
+            })
+        } else if PK::TYPE == Self::TYPE {
+            let buf: PK::T = pk.into_ref();
+            Self::try_from_ref(buf.as_ref())
+        } else {
+            Err(ParseKeypairError::MismatchedScheme)
+        }
+    }
 }
 
 impl Repr<[u8]> for Keypair {
@@ -247,6 +287,19 @@ pub struct Signature(pub ed25519_consensus::Signature);
 
 impl super::Signature for Signature {
     const TYPE: SchemeType = SigScheme::TYPE;
+
+    fn try_from_sig<PK: super::Signature>(pk: &PK) -> Result<Self, ParseSignatureError> {
+        if PK::TYPE == super::common::Signature::TYPE {
+            super::common::Signature::try_from_sig(pk).and_then(|x| match x {
+                super::common::Signature::Ed25519(epk) => Ok(epk),
+                _ => Err(ParseSignatureError::MismatchedScheme)
+            })
+        } else if PK::TYPE == Self::TYPE {
+            Self::try_from_ref(pk.into_ref().as_ref())
+        } else {
+            Err(ParseSignatureError::MismatchedScheme)
+        }
+    }
 }
 
 impl Repr<[u8]> for Signature {
