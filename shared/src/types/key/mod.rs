@@ -120,15 +120,6 @@ pub trait TryFromRef<T: ?Sized> : Sized {
     fn try_from_ref(value: &T) -> Result<Self, Self::Error>;
 }
 
-/// Associates a the given abstract representation to a type
-
-pub trait Repr<U : ?Sized> {
-    /// The type that can represent the implementing type
-    type T: AsRef<U> + Send + Sync;
-    /// The size of the above type
-    const LENGTH: usize = 1;
-}
-
 /// Type capturing signature scheme IDs
 #[derive(PartialEq, Eq, Copy, Clone)]
 pub enum SchemeType {
@@ -144,18 +135,14 @@ pub enum SchemeType {
 
 pub trait Signature : Hash
     + PartialOrd
-    + IntoRef<<Self as Repr<[u8]>>::T>
-    + TryFromRef<[u8], Error = ParseSignatureError>
     + BorshSerialize
-    + BorshDeserialize
-    + Repr<[u8]> {
+    + BorshDeserialize {
         /// The scheme type of this implementation
         const TYPE: SchemeType;
         /// Convert from one Signature type to another
         fn try_from_sig<PK: Signature>(pk: &PK) -> Result<Self, ParseSignatureError> {
             if PK::TYPE == Self::TYPE {
-                let kpu8: <PK as Repr<[u8]>>::T = pk.into_ref();
-                Self::try_from_ref(kpu8.as_ref())
+                Self::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParseSignatureError::InvalidEncoding)
             } else {
                 Err(ParseSignatureError::MismatchedScheme)
             }
@@ -173,9 +160,6 @@ pub trait PublicKey : BorshSerialize
     + PartialOrd
     + FromStr<Err = ParsePublicKeyError>
     + Hash
-    + IntoRef<<Self as Repr<[u8]>>::T>
-    + TryFromRef<[u8], Error = ParsePublicKeyError>
-    + Repr<[u8]>
     + Send
     + Sync {
         /// The scheme type of this implementation
@@ -183,7 +167,7 @@ pub trait PublicKey : BorshSerialize
         /// Convert from one PublicKey type to another
         fn try_from_pk<PK: PublicKey>(pk: &PK) -> Result<Self, ParsePublicKeyError> {
             if Self::TYPE == PK::TYPE {
-                Self::try_from_ref(pk.into_ref().as_ref())
+                Self::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParsePublicKeyError::InvalidEncoding)
             } else {
                 Err(ParsePublicKeyError::MismatchedScheme)
             }
@@ -196,16 +180,13 @@ pub trait SecretKey : BorshSerialize
     + BorshDeserialize
     + Display
     + FromStr<Err = ParseSecretKeyError>
-    + IntoRef<<Self as Repr<[u8]>>::T>
-    + TryFromRef<[u8], Error = ParseSecretKeyError>
-    + Repr<[u8]>
     + Clone {
         /// The scheme type of this implementation
         const TYPE: SchemeType;
         /// Convert from one SecretKey type to another
         fn try_from_sk<PK: SecretKey>(pk: &PK) -> Result<Self, ParseSecretKeyError> {
             if PK::TYPE == Self::TYPE {
-                Self::try_from_ref(pk.into_ref().as_ref())
+                Self::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParseSecretKeyError::InvalidEncoding)
             } else {
                 Err(ParseSecretKeyError::MismatchedScheme)
             }
@@ -218,11 +199,8 @@ pub trait Keypair : Display
     + IntoRef<(Self::PublicKey, Self::SecretKey)>
     + TryFromRef<(Self::PublicKey, Self::SecretKey), Error = ParseKeypairError>
     + FromStr<Err = ParseKeypairError>
-    + IntoRef<<Self as Repr<[u8]>>::T>
-    + TryFromRef<[u8], Error = ParseKeypairError>
     + BorshSerialize
     + BorshDeserialize
-    + Repr<[u8]>
     + Debug
     + Sync
     + Send
@@ -244,8 +222,7 @@ pub trait Keypair : Display
         /// Convert from one Keypair type to another
         fn try_from_kp<PK: Keypair>(pk: &PK) -> Result<Self, ParseKeypairError> {
             if PK::TYPE == Self::TYPE {
-                let kpu8: <PK as Repr<[u8]>>::T = pk.into_ref();
-                Self::try_from_ref(kpu8.as_ref())
+                Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseKeypairError::InvalidEncoding)
             } else {
                 Err(ParseKeypairError::MismatchedScheme)
             }
@@ -290,15 +267,6 @@ pub trait SigScheme : Eq + Ord + Debug + Serialize + Default {
         sig: &Self::Signature,
     ) -> Result<(), VerifySigError>;
 }
-
-/// Shorthand to access byte array type that can represent public key
-pub type PublicKeyRep<S> = <<S as SigScheme>::PublicKey as Repr<[u8]>>::T;
-/// Shorthand to access byte array type that can represent secret key
-pub type SecretKeyRep<S> = <<S as SigScheme>::SecretKey as Repr<[u8]>>::T;
-/// Shorthand to access byte array type that can represent signature
-pub type SignatureRep<S> = <<S as SigScheme>::Signature as Repr<[u8]>>::T;
-/// Shorthand to access byte array type that can represent keypair
-pub type KeypairRep<S> = <<S as SigScheme>::Keypair as Repr<[u8]>>::T;
 
 /// This can be used to sign an arbitrary tx. The signature is produced and
 /// verified on the tx data concatenated with the tx code, however the tx code
@@ -409,7 +377,6 @@ pub struct PublicKeyHash(pub(crate) String);
 
 const PKH_HASH_LEN: usize = address::HASH_LEN;
 
-
 impl From<PublicKeyHash> for String {
     fn from(pkh: PublicKeyHash) -> Self {
         pkh.0
@@ -459,10 +426,11 @@ impl<PK: PublicKey> From<&PK> for PublicKeyHash {
 #[cfg(any(test, feature = "testing"))]
 pub mod testing {
     use proptest::prelude::*;
+    use borsh::BorshDeserialize;
     use rand::prelude::{StdRng, ThreadRng};
     use rand::{thread_rng, SeedableRng};
     use crate::types::key::ed25519c;
-    use super::{SigScheme, SchemeType, TryFromRef};
+    use super::{SigScheme, SchemeType};
 
     /// A keypair for tests
     pub fn keypair_1() -> <ed25519c::SigScheme as SigScheme>::Keypair {
@@ -474,7 +442,7 @@ pub mod testing {
             137, 102, 22, 229, 110, 195, 38, 174, 142, 127, 157, 224, 139, 212,
             239, 204, 58, 80, 108, 184,
         ];
-        <ed25519c::SigScheme as SigScheme>::Keypair::try_from_ref(bytes.as_ref()).unwrap().into()
+        <ed25519c::SigScheme as SigScheme>::Keypair::try_from_slice(bytes.as_ref()).unwrap().into()
     }
 
     /// A keypair for tests
@@ -487,7 +455,7 @@ pub mod testing {
             173, 117, 91, 248, 234, 34, 13, 77, 148, 10, 75, 30, 191, 172, 85,
             175, 8, 36, 233, 18, 203,
         ];
-        <ed25519c::SigScheme as SigScheme>::Keypair::try_from_ref(bytes.as_ref()).unwrap().into()
+        <ed25519c::SigScheme as SigScheme>::Keypair::try_from_slice(bytes.as_ref()).unwrap().into()
     }
 
     /// Generate an arbitrary [`Keypair`].
@@ -519,10 +487,9 @@ macro_rules! sigscheme_test {
 
                 let mut rng: ThreadRng = thread_rng();
                 let keypair = <$type>::generate(&mut rng, $sid).unwrap();
-                let bytes: KeypairRep<$type> = keypair.into_ref();
                 println!(
                     "keypair {:?}",
-                    bytes
+                    keypair.try_to_vec().unwrap().as_slice()
                 );
             }
             /// Run `cargo test gen_keypair -- --nocapture` to generate a

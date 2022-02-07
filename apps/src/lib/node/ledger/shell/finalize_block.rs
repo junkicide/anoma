@@ -306,7 +306,7 @@ where
             let consensus_key: ed25519c::PublicKey = consensus_key.into();
             let pub_key = TendermintPublicKey {
                 sum: Some(public_key::Sum::Ed25519(
-                    consensus_key.into_ref().to_vec(),
+                    consensus_key.try_to_vec().unwrap(),
                 )),
             };
             let pub_key = Some(pub_key);

@@ -267,7 +267,7 @@ where
                 validator.pos_data.consensus_key.clone();
             let pub_key = TendermintPublicKey {
                 sum: Some(public_key::Sum::Ed25519(
-                    consensus_key.into_ref().to_vec(),
+                    consensus_key.try_to_vec().unwrap(),
                 )),
             };
             abci_validator.pub_key = Some(pub_key);

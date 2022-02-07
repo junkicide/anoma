@@ -231,8 +231,7 @@ pub fn init_network(
         let node_id: TendermintNodeId = id_from_pk(node_pk);
 
         // Convert and write the keypair into Tendermint node_key.json file
-        let node_key: <ed25519c::Keypair as Repr<[u8]>>::T = node_keypair.into_ref();
-        let tm_node_key = base64::encode(node_key.as_ref());
+        let tm_node_key = base64::encode(node_keypair.try_to_vec().unwrap().as_slice());
         let tm_node_keypair_json = json!({
             "priv_key": {
                 "type": "tendermint/PrivKeyEd25519",

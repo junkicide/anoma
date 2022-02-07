@@ -1,18 +1,13 @@
 //! Cryptographic keys
 
 use super::{ed25519c, secp256k1};
-use super::{ParsePublicKeyError, VerifySigError, SchemeType, IntoRef, TryFromRef, ParseSecretKeyError, ParseKeypairError, ParseSignatureError, Repr, SigScheme as SigSchemeTrait};
+use super::{ParsePublicKeyError, VerifySigError, SchemeType, IntoRef, TryFromRef, ParseSecretKeyError, ParseKeypairError, ParseSignatureError, SigScheme as SigSchemeTrait};
 use std::fmt::Display;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 use serde::{Serialize, Deserialize};
 use borsh::{BorshSerialize, BorshDeserialize};
 use std::str::FromStr;
-
-/// Find maximum of pair. Needed to calculate array sizes.
-const fn max(a: usize, b: usize) -> usize {
-    [a, b][(a < b) as usize]
-}
 
 /// Public key
 #[derive(
@@ -35,28 +30,19 @@ pub enum PublicKey {
     Secp256k1(secp256k1::PublicKey),
 }
 
-const PUBLIC_KEY_LENGTH: usize = 1 +
-    max(<ed25519c::SigScheme as super::SigScheme>::PublicKey::LENGTH,
-    max(<secp256k1::SigScheme as super::SigScheme>::PublicKey::LENGTH, 0));
-
 impl super::PublicKey for PublicKey {
     const TYPE: SchemeType = SigScheme::TYPE;
     fn try_from_pk<PK: super::PublicKey>(pk: &PK) -> Result<Self, ParsePublicKeyError> {
         if PK::TYPE == Self::TYPE {
-            Self::try_from_ref(pk.into_ref().as_ref())
+            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParsePublicKeyError::InvalidEncoding)
         } else if PK::TYPE == ed25519c::PublicKey::TYPE {
-            Ok(Self::Ed25519(ed25519c::PublicKey::try_from_ref(pk.into_ref().as_ref())?))
+            Ok(Self::Ed25519(ed25519c::PublicKey::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParsePublicKeyError::InvalidEncoding)?))
         } else if PK::TYPE == secp256k1::PublicKey::TYPE {
-            Ok(Self::Secp256k1(secp256k1::PublicKey::try_from_ref(pk.into_ref().as_ref())?))
+            Ok(Self::Secp256k1(secp256k1::PublicKey::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParsePublicKeyError::InvalidEncoding)?))
         } else {
             Err(ParsePublicKeyError::MismatchedScheme)
         }
     }
-}
-
-impl Repr<[u8]> for PublicKey {
-    const LENGTH: usize = PUBLIC_KEY_LENGTH;
-    type T = [u8; PUBLIC_KEY_LENGTH];
 }
 
 impl Display for PublicKey {
@@ -65,27 +51,11 @@ impl Display for PublicKey {
     }
 }
 
-impl IntoRef<[u8; PUBLIC_KEY_LENGTH]> for PublicKey {
-    fn into_ref(&self) -> [u8; PUBLIC_KEY_LENGTH] {
-        let src = self.try_to_vec().unwrap();
-        let mut dest = [0; PUBLIC_KEY_LENGTH];
-        dest[.. src.len()].copy_from_slice(&src[..]);
-        dest
-    }
-}
-
-impl TryFromRef<[u8]> for PublicKey {
-    type Error = ParsePublicKeyError;
-    fn try_from_ref(mut bytes: &[u8]) -> Result<Self, Self::Error> {
-        BorshDeserialize::deserialize(&mut bytes).map_err(ParsePublicKeyError::InvalidEncoding)
-    }
-}
-
 impl FromStr for PublicKey {
     type Err = ParsePublicKeyError;
     fn from_str(str: &str) -> Result<Self, Self::Err> {
         let vec = hex::decode(str).map_err(ParsePublicKeyError::InvalidHex)?;
-        TryFromRef::try_from_ref(vec.as_slice())
+        Self::try_from_slice(vec.as_slice()).map_err(ParsePublicKeyError::InvalidEncoding)
     }
 }
 
@@ -98,43 +68,18 @@ pub enum SecretKey {
     Secp256k1(secp256k1::SecretKey),
 }
 
-const SECRET_KEY_LENGTH: usize = 1 +
-    max(<ed25519c::SigScheme as super::SigScheme>::SecretKey::LENGTH,
-    max(<secp256k1::SigScheme as super::SigScheme>::SecretKey::LENGTH, 0));
-
 impl super::SecretKey for SecretKey {
     const TYPE: SchemeType = SigScheme::TYPE;
     fn try_from_sk<PK: super::SecretKey>(pk: &PK) -> Result<Self, ParseSecretKeyError> {
         if PK::TYPE == Self::TYPE {
-            Self::try_from_ref(pk.into_ref().as_ref())
+            Self::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParseSecretKeyError::InvalidEncoding)
         } else if PK::TYPE == ed25519c::SecretKey::TYPE {
-            Ok(Self::Ed25519(ed25519c::SecretKey::try_from_ref(pk.into_ref().as_ref())?))
+            Ok(Self::Ed25519(ed25519c::SecretKey::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParseSecretKeyError::InvalidEncoding)?))
         } else if PK::TYPE == secp256k1::SecretKey::TYPE {
-            Ok(Self::Secp256k1(secp256k1::SecretKey::try_from_ref(pk.into_ref().as_ref())?))
+            Ok(Self::Secp256k1(secp256k1::SecretKey::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParseSecretKeyError::InvalidEncoding)?))
         } else {
             Err(ParseSecretKeyError::MismatchedScheme)
         }
-    }
-}
-
-impl Repr<[u8]> for SecretKey {
-    const LENGTH: usize = SECRET_KEY_LENGTH;
-    type T = [u8; SECRET_KEY_LENGTH];
-}
-
-impl IntoRef<[u8; SECRET_KEY_LENGTH]> for SecretKey {
-    fn into_ref(&self) -> [u8; SECRET_KEY_LENGTH] {
-        let src = self.try_to_vec().unwrap();
-        let mut dest = [0; SECRET_KEY_LENGTH];
-        dest[.. src.len()].copy_from_slice(&src[..]);
-        dest
-    }
-}
-
-impl TryFromRef<[u8]> for SecretKey {
-    type Error = ParseSecretKeyError;
-    fn try_from_ref(mut bytes: &[u8]) -> Result<Self, Self::Error> {
-        BorshDeserialize::deserialize(&mut bytes).map_err(ParseSecretKeyError::InvalidEncoding)
     }
 }
 
@@ -148,7 +93,7 @@ impl FromStr for SecretKey {
     type Err = ParseSecretKeyError;
     fn from_str(str: &str) -> Result<Self, Self::Err> {
         let vec = hex::decode(str).map_err(ParseSecretKeyError::InvalidHex)?;
-        TryFromRef::try_from_ref(vec.as_slice())
+        Self::try_from_slice(vec.as_slice()).map_err(ParseSecretKeyError::InvalidEncoding)
     }
 }
 
@@ -170,43 +115,18 @@ pub enum Signature {
     Secp256k1(secp256k1::Signature),
 }
 
-const SIGNATURE_LENGTH: usize = 1 +
-    max(<ed25519c::SigScheme as super::SigScheme>::Signature::LENGTH,
-    max(<secp256k1::SigScheme as super::SigScheme>::Signature::LENGTH, 0));
-
 impl super::Signature for Signature {
     const TYPE: SchemeType = SigScheme::TYPE;
     fn try_from_sig<PK: super::Signature>(pk: &PK) -> Result<Self, ParseSignatureError> {
         if PK::TYPE == Self::TYPE {
-            Self::try_from_ref(pk.into_ref().as_ref())
+            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseSignatureError::InvalidEncoding)
         } else if PK::TYPE == ed25519c::Signature::TYPE {
-            Ok(Self::Ed25519(ed25519c::Signature::try_from_ref(pk.into_ref().as_ref())?))
+            Ok(Self::Ed25519(ed25519c::Signature::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseSignatureError::InvalidEncoding)?))
         } else if PK::TYPE == secp256k1::Signature::TYPE {
-            Ok(Self::Secp256k1(secp256k1::Signature::try_from_ref(pk.into_ref().as_ref())?))
+            Ok(Self::Secp256k1(secp256k1::Signature::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParseSignatureError::InvalidEncoding)?))
         } else {
             Err(ParseSignatureError::MismatchedScheme)
         }
-    }
-}
-
-impl Repr<[u8]> for Signature {
-    const LENGTH: usize = SIGNATURE_LENGTH;
-    type T = [u8; SIGNATURE_LENGTH];
-}
-
-impl IntoRef<[u8; SIGNATURE_LENGTH]> for Signature {
-    fn into_ref(&self) -> [u8; SIGNATURE_LENGTH] {
-        let src = self.try_to_vec().unwrap();
-        let mut dest = [0; SIGNATURE_LENGTH];
-        dest[.. src.len()].copy_from_slice(&src[..]);
-        dest
-    }
-}
-
-impl TryFromRef<[u8]> for Signature {
-    type Error = ParseSignatureError;
-    fn try_from_ref(mut bytes: &[u8]) -> Result<Self, Self::Error> {
-        BorshDeserialize::deserialize(&mut bytes).map_err(ParseSignatureError::InvalidEncoding)
     }
 }
 
@@ -219,31 +139,22 @@ pub enum Keypair {
     Secp256k1(secp256k1::Keypair),
 }
 
-const KEYPAIR_LENGTH: usize = 1 +
-    max(<ed25519c::SigScheme as super::SigScheme>::Keypair::LENGTH,
-    max(<secp256k1::SigScheme as super::SigScheme>::Keypair::LENGTH, 0));
-
 impl super::Keypair for Keypair {
     const TYPE: SchemeType = SigScheme::TYPE;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
     fn try_from_kp<PK: super::Keypair>(pk: &PK) -> Result<Self, ParseKeypairError> {
-        let buf: PK::T = pk.into_ref();
+        let buf = pk.try_to_vec().unwrap();
         if PK::TYPE == Self::TYPE {
-            Self::try_from_ref(buf.as_ref())
+            Self::try_from_slice(buf.as_slice()).map_err(ParseKeypairError::InvalidEncoding)
         } else if PK::TYPE == ed25519c::Keypair::TYPE {
-            Ok(Self::Ed25519(ed25519c::Keypair::try_from_ref(buf.as_ref())?))
+            Ok(Self::Ed25519(ed25519c::Keypair::try_from_slice(buf.as_slice()).map_err(ParseKeypairError::InvalidEncoding)?))
         } else if PK::TYPE == secp256k1::Keypair::TYPE {
-            Ok(Self::Secp256k1(secp256k1::Keypair::try_from_ref(buf.as_ref())?))
+            Ok(Self::Secp256k1(secp256k1::Keypair::try_from_slice(buf.as_slice()).map_err(ParseKeypairError::InvalidEncoding)?))
         } else {
             Err(ParseKeypairError::MismatchedScheme)
         }
     }
-}
-
-impl Repr<[u8]> for Keypair {
-    const LENGTH: usize = KEYPAIR_LENGTH;
-    type T = [u8; KEYPAIR_LENGTH];
 }
 
 impl Display for Keypair {
@@ -281,27 +192,11 @@ impl TryFromRef<(PublicKey, SecretKey)> for Keypair {
     }
 }
 
-impl IntoRef<[u8; KEYPAIR_LENGTH]> for Keypair {
-    fn into_ref(&self) -> [u8; KEYPAIR_LENGTH] {
-        let src = self.try_to_vec().unwrap();
-        let mut dest = [0; KEYPAIR_LENGTH];
-        dest[.. src.len()].copy_from_slice(&src[..]);
-        dest
-    }
-}
-
-impl TryFromRef<[u8]> for Keypair {
-    type Error = ParseKeypairError;
-    fn try_from_ref(mut bytes: &[u8]) -> Result<Self, Self::Error> {
-        BorshDeserialize::deserialize(&mut bytes).map_err(ParseKeypairError::InvalidEncoding)
-    }
-}
-
 impl FromStr for Keypair {
     type Err = ParseKeypairError;
     fn from_str(str: &str) -> Result<Self, Self::Err> {
         let vec = hex::decode(str).map_err(ParseKeypairError::InvalidHex)?;
-        TryFromRef::try_from_ref(vec.as_slice())
+        Self::try_from_slice(vec.as_slice()).map_err(ParseKeypairError::InvalidEncoding)
     }
 }
 

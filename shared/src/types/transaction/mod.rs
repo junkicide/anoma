@@ -405,7 +405,7 @@ pub mod tx_types {
                     .try_to_vec()
                     .expect("Test failed"),
             ),
-            sig: ed25519c::Signature::try_from_ref([0u8; 64].as_ref()).unwrap(),
+            sig: ed25519c::Signature::try_from_slice([0u8; 64].as_ref()).unwrap(),
         };
         // create the tx with signed decrypted data
         let tx =

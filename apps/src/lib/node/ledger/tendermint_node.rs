@@ -26,6 +26,7 @@ use thiserror::Error;
 use tokio::fs::{self, File, OpenOptions};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::process::Command;
+use borsh::BorshSerialize;
 
 use crate::config;
 
@@ -235,9 +236,9 @@ pub async fn write_validator_key_async(
         .await
         .expect("Couldn't create private validator key file");
     let pk: ed25519c::PublicKey = consensus_key.public_part();
-    let pk = base64::encode(pk.into_ref().as_ref());
-    let ck_arr: <ed25519c::Keypair as Repr<[u8]>>::T = consensus_key.into_ref();
-    let sk = base64::encode(ck_arr.as_ref());
+    let pk = base64::encode(pk.try_to_vec().unwrap().as_slice());
+    let ck_arr = consensus_key.try_to_vec().unwrap();
+    let sk = base64::encode(ck_arr.as_slice());
     let address = address.raw_hash().unwrap();
     let key = json!({
        "address": address,
@@ -276,9 +277,9 @@ pub fn write_validator_key(
         .open(&path)
         .expect("Couldn't create private validator key file");
     let pk: ed25519c::PublicKey = consensus_key.public_part();
-    let pk = base64::encode(pk.into_ref());
-    let ck_arr: <ed25519c::Keypair as Repr<[u8]>>::T = consensus_key.into_ref();
-    let sk = base64::encode(ck_arr.as_ref());
+    let pk = base64::encode(pk.try_to_vec().unwrap());
+    let ck_arr = consensus_key.try_to_vec().unwrap();
+    let sk = base64::encode(ck_arr.as_slice());
     let address = address.raw_hash().unwrap();
     let key = json!({
        "address": address,

@@ -2,7 +2,7 @@
 
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
-use std::io::{ErrorKind, Write};
+use std::io::Write;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -11,7 +11,7 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ParsePublicKeyError, IntoRef, TryFromRef, VerifySigError, SchemeType, Repr, ParseSecretKeyError, ParseKeypairError, ParseSignatureError, SigScheme as SigSchemeTrait
+    ParsePublicKeyError, IntoRef, TryFromRef, VerifySigError, SchemeType, ParseSecretKeyError, ParseKeypairError, ParseSignatureError, SigScheme as SigSchemeTrait
 };
 
 /// Ed25519 public key
@@ -28,28 +28,10 @@ impl super::PublicKey for PublicKey {
                 _ => Err(ParsePublicKeyError::MismatchedScheme)
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_ref(pk.into_ref().as_ref())
+            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParsePublicKeyError::InvalidEncoding)
         } else {
             Err(ParsePublicKeyError::MismatchedScheme)
         }
-    }
-}
-
-impl Repr<[u8]> for PublicKey {
-    const LENGTH: usize = ed25519_dalek::PUBLIC_KEY_LENGTH;
-    type T = [u8; ed25519_dalek::PUBLIC_KEY_LENGTH];
-}
-
-impl IntoRef<[u8; ed25519_dalek::PUBLIC_KEY_LENGTH]> for PublicKey {
-    fn into_ref(&self) -> [u8; ed25519_dalek::PUBLIC_KEY_LENGTH] {
-        self.0.to_bytes()
-    }
-}
-
-impl TryFromRef<[u8]> for PublicKey {
-    type Error = ParsePublicKeyError;
-    fn try_from_ref(bytes: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self(ed25519_consensus::VerificationKey::try_from(bytes).map_err(|err| ParsePublicKeyError::InvalidEncoding(std::io::Error::new(ErrorKind::InvalidInput, err)))?))
     }
 }
 
@@ -121,7 +103,7 @@ impl super::SecretKey for SecretKey {
                 _ => Err(ParseSecretKeyError::MismatchedScheme)
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_ref(pk.into_ref().as_ref())
+            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseSecretKeyError::InvalidEncoding)
         } else {
             Err(ParseSecretKeyError::MismatchedScheme)
         }
@@ -131,24 +113,6 @@ impl super::SecretKey for SecretKey {
 impl Clone for SecretKey {
     fn clone(&self) -> SecretKey {
         SecretKey(ed25519_consensus::SigningKey::from(self.0.to_bytes()))
-    }
-}
-
-impl Repr<[u8]> for SecretKey {
-    const LENGTH: usize = ed25519_dalek::SECRET_KEY_LENGTH;
-    type T = [u8; ed25519_dalek::SECRET_KEY_LENGTH];
-}
-
-impl IntoRef<[u8; ed25519_dalek::SECRET_KEY_LENGTH]> for SecretKey {
-    fn into_ref(&self) -> [u8; ed25519_dalek::SECRET_KEY_LENGTH] {
-        self.0.to_bytes()
-    }
-}
-
-impl TryFromRef<[u8]> for SecretKey {
-    type Error = ParseSecretKeyError;
-    fn try_from_ref(bytes: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self(ed25519_consensus::SigningKey::try_from(bytes).map_err(|err| ParseSecretKeyError::InvalidEncoding(std::io::Error::new(ErrorKind::InvalidInput, err)))?))
     }
 }
 
@@ -196,25 +160,10 @@ impl super::Keypair for Keypair {
                 _ => Err(ParseKeypairError::MismatchedScheme)
             })
         } else if PK::TYPE == Self::TYPE {
-            let buf: PK::T = pk.into_ref();
-            Self::try_from_ref(buf.as_ref())
+            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseKeypairError::InvalidEncoding)
         } else {
             Err(ParseKeypairError::MismatchedScheme)
         }
-    }
-}
-
-impl Repr<[u8]> for Keypair {
-    const LENGTH: usize = ed25519_dalek::SECRET_KEY_LENGTH + ed25519_dalek::PUBLIC_KEY_LENGTH;
-    type T = [u8; Self::LENGTH];
-}
-
-impl IntoRef<<Self as Repr<[u8]>>::T> for Keypair {
-    fn into_ref(&self) -> <Self as Repr<[u8]>>::T {
-        let mut arr = [0; Self::LENGTH];
-        arr[..ed25519_dalek::SECRET_KEY_LENGTH].copy_from_slice(self.1.as_bytes());
-        arr[ed25519_dalek::SECRET_KEY_LENGTH..].copy_from_slice(self.0.as_bytes());
-        arr
     }
 }
 
@@ -228,20 +177,6 @@ impl TryFromRef<(PublicKey, SecretKey)> for Keypair {
     type Error = ParseKeypairError;
     fn try_from_ref(kp: &(PublicKey, SecretKey)) -> Result<Self, Self::Error> {
         Ok(Self(kp.0.0, kp.1.0))
-    }
-}
-
-impl TryFromRef<[u8]> for Keypair {
-    type Error = ParseKeypairError;
-    fn try_from_ref(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let hdl = |err| ParseKeypairError::InvalidEncoding(std::io::Error::new(ErrorKind::InvalidInput, err));
-        let sk: ed25519_consensus::SigningKey = bytes[..ed25519_dalek::SECRET_KEY_LENGTH].try_into().map_err(hdl)?;
-        let pk: ed25519_consensus::VerificationKey = bytes[ed25519_dalek::SECRET_KEY_LENGTH..].try_into().map_err(hdl)?;
-        if pk == sk.verification_key() {
-            Ok(Keypair(pk, sk))
-        } else {
-            Err(ParseKeypairError::MismatchedParts)
-        }
     }
 }
 
@@ -267,8 +202,7 @@ impl BorshDeserialize for Keypair {
 
 impl Display for Keypair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let bytes: <Self as Repr<[u8]>>::T = self.into_ref();
-        write!(f, "{}", hex::encode(bytes.as_ref()))
+        write!(f, "{}", hex::encode(self.try_to_vec().unwrap().as_slice()))
     }
 }
 
@@ -277,7 +211,7 @@ impl FromStr for Keypair {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let vec = hex::decode(s).map_err(ParseKeypairError::InvalidHex)?;
-        Keypair::try_from_ref(vec.as_slice())
+        Keypair::try_from_slice(vec.as_slice()).map_err(ParseKeypairError::InvalidEncoding)
     }
 }
 
@@ -295,16 +229,11 @@ impl super::Signature for Signature {
                 _ => Err(ParseSignatureError::MismatchedScheme)
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_ref(pk.into_ref().as_ref())
+            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseSignatureError::InvalidEncoding)
         } else {
             Err(ParseSignatureError::MismatchedScheme)
         }
     }
-}
-
-impl Repr<[u8]> for Signature {
-    const LENGTH: usize = ed25519_dalek::SIGNATURE_LENGTH;
-    type T = [u8; ed25519_dalek::SIGNATURE_LENGTH];
 }
 
 impl BorshDeserialize for Signature {
@@ -333,19 +262,6 @@ impl PartialOrd for Signature {
             .partial_cmp(
                 &other.0.to_bytes(),
             )
-    }
-}
-
-impl IntoRef<[u8; ed25519_dalek::SIGNATURE_LENGTH]> for Signature {
-    fn into_ref(&self) -> [u8; ed25519_dalek::SIGNATURE_LENGTH] {
-        self.0.to_bytes()
-    }
-}
-
-impl TryFromRef<[u8]> for Signature {
-    type Error = ParseSignatureError;
-    fn try_from_ref(bytes: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Signature(ed25519_consensus::Signature::try_from(bytes).map_err(|err| ParseSignatureError::InvalidEncoding(std::io::Error::new(ErrorKind::InvalidInput, err)))?))
     }
 }
 

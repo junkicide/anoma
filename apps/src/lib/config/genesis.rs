@@ -604,7 +604,7 @@ pub fn genesis() -> Genesis {
     // `tests::gen_genesis_validator` below.
     let consensus_keypair = wallet::defaults::validator_keypair();
     let account_keypair = wallet::defaults::validator_keypair();
-    let staking_reward_keypair = <ed25519c::Keypair as TryFromRef<[u8]>>::try_from_ref(&[
+    let staking_reward_keypair = ed25519c::Keypair::try_from_slice(&[
         61, 198, 87, 204, 44, 94, 234, 228, 217, 72, 245, 27, 40, 2, 151, 174,
         24, 247, 69, 6, 9, 30, 44, 16, 88, 238, 77, 162, 243, 125, 240, 206,
         111, 92, 66, 23, 105, 211, 33, 236, 5, 208, 17, 88, 177, 112, 100, 154,
@@ -720,6 +720,7 @@ pub mod tests {
     use anoma::types::key::*;
     use rand::prelude::ThreadRng;
     use rand::thread_rng;
+    use borsh::BorshSerialize;
 
     /// Run `cargo test gen_genesis_validator -- --nocapture` to generate a
     /// new genesis validator address, staking reward address and keypair.
@@ -729,9 +730,9 @@ pub mod tests {
         let staking_reward_address = gen_established_address();
         let mut rng: ThreadRng = thread_rng();
         let keypair = ed25519c::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap();
-        let kp_arr: <ed25519c::Keypair as Repr<[u8]>>::T = keypair.into_ref();
+        let kp_arr = keypair.try_to_vec().unwrap();
         let staking_reward_keypair = ed25519c::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap();
-        let srkp_arr: <ed25519c::Keypair as Repr<[u8]>>::T = staking_reward_keypair.into_ref();
+        let srkp_arr = staking_reward_keypair.try_to_vec().unwrap();
         println!("address: {}", address);
         println!("staking_reward_address: {}", staking_reward_address);
         println!("keypair: {:?}", kp_arr);

@@ -1,6 +1,5 @@
 //! Secp256k1 keys and related functionality
 
-use std::convert::TryInto;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::io::{ErrorKind, Write};
@@ -9,7 +8,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::str::FromStr;
-use super::{ParsePublicKeyError, ParseSecretKeyError, ParseKeypairError, ParseSignatureError, TryFromRef, VerifySigError, IntoRef, Repr, SchemeType, SigScheme as SigSchemeTrait};
+use super::{ParsePublicKeyError, ParseSecretKeyError, ParseKeypairError, ParseSignatureError, TryFromRef, VerifySigError, IntoRef, SchemeType, SigScheme as SigSchemeTrait};
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 
@@ -27,36 +26,16 @@ impl super::PublicKey for PublicKey {
                 _ => Err(ParsePublicKeyError::MismatchedScheme)
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_ref(pk.into_ref().as_ref())
+            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParsePublicKeyError::InvalidEncoding)
         } else {
             Err(ParsePublicKeyError::MismatchedScheme)
         }
     }
 }
 
-impl Repr<[u8]> for PublicKey {
-    type T = [u8; libsecp256k1::util::FULL_PUBLIC_KEY_SIZE];
-    const LENGTH: usize = libsecp256k1::util::FULL_PUBLIC_KEY_SIZE;
-}
-
-impl IntoRef<<Self as Repr<[u8]>>::T> for PublicKey {
-    fn into_ref(&self) -> <Self as Repr<[u8]>>::T {
-        self.0.serialize()
-    }
-}
-
 impl From<libsecp256k1::PublicKey> for PublicKey {
     fn from(pk: libsecp256k1::PublicKey) -> Self {
         Self(pk)
-    }
-}
-
-impl TryFromRef<[u8]> for PublicKey {
-    type Error = ParsePublicKeyError;
-    fn try_from_ref(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let arr = bytes.try_into().unwrap();
-        let pk_res = libsecp256k1::PublicKey::parse(arr);
-        Ok(Self(pk_res.map_err(|err| ParsePublicKeyError::InvalidEncoding(std::io::Error::new(ErrorKind::InvalidInput, err)))?))
     }
 }
 
@@ -129,30 +108,10 @@ impl super::SecretKey for SecretKey {
                 _ => Err(ParseSecretKeyError::MismatchedScheme)
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_ref(pk.into_ref().as_ref())
+            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseSecretKeyError::InvalidEncoding)
         } else {
             Err(ParseSecretKeyError::MismatchedScheme)
         }
-    }
-}
-
-impl Repr<[u8]> for SecretKey {
-    type T = [u8; libsecp256k1::util::SECRET_KEY_SIZE];
-    const LENGTH: usize = libsecp256k1::util::SECRET_KEY_SIZE;
-}
-
-impl IntoRef<<Self as Repr<[u8]>>::T> for SecretKey {
-    fn into_ref(&self) -> <Self as Repr<[u8]>>::T {
-        self.0.serialize()
-    }
-}
-
-impl TryFromRef<[u8]> for SecretKey {
-    type Error = ParseSecretKeyError;
-    fn try_from_ref(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let arr = bytes.try_into().unwrap();
-        let sk_res = libsecp256k1::SecretKey::parse(arr);
-        Ok(Self(sk_res.map_err(|err| ParseSecretKeyError::InvalidEncoding(std::io::Error::new(ErrorKind::InvalidInput, err)))?))
     }
 }
 
@@ -199,21 +158,10 @@ impl super::Signature for Signature {
                 _ => Err(ParseSignatureError::MismatchedScheme)
             })
         } else if PK::TYPE == Self::TYPE {
-            Self::try_from_ref(pk.into_ref().as_ref())
+            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseSignatureError::InvalidEncoding)
         } else {
             Err(ParseSignatureError::MismatchedScheme)
         }
-    }
-}
-
-impl Repr<[u8]> for Signature {
-    type T = [u8; libsecp256k1::util::SIGNATURE_SIZE];
-    const LENGTH: usize = libsecp256k1::util::SIGNATURE_SIZE;
-}
-
-impl IntoRef<<Self as Repr<[u8]>>::T> for Signature {
-    fn into_ref(&self) -> <Self as Repr<[u8]>>::T {
-        self.0.serialize()
     }
 }
 
@@ -248,13 +196,6 @@ impl PartialOrd for Signature {
     }
 }
 
-impl TryFromRef<[u8]> for Signature {
-    type Error = ParseSignatureError;
-    fn try_from_ref(bytes: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Signature(libsecp256k1::Signature::parse_standard_slice(bytes).map_err(|err| ParseSignatureError::InvalidEncoding(std::io::Error::new(ErrorKind::InvalidInput, err)))?))
-    }
-}
-
 /// Secp256k1 key pair
 #[derive(Debug, Clone)]
 pub struct Keypair(libsecp256k1::PublicKey, libsecp256k1::SecretKey);
@@ -271,49 +212,16 @@ impl super::Keypair for Keypair {
                 _ => Err(ParseKeypairError::MismatchedScheme)
             })
         } else if PK::TYPE == Self::TYPE {
-            let buf: PK::T = pk.into_ref();
-            Self::try_from_ref(buf.as_ref())
+            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseKeypairError::InvalidEncoding)
         } else {
             Err(ParseKeypairError::MismatchedScheme)
         }
     }
 }
 
-impl Repr<[u8]> for Keypair {
-    type T = [u8; Self::LENGTH];
-    const LENGTH: usize = libsecp256k1::util::SECRET_KEY_SIZE + libsecp256k1::util::FULL_PUBLIC_KEY_SIZE;
-}
-
-impl IntoRef<<Self as Repr<[u8]>>::T> for Keypair {
-    fn into_ref(&self) -> <Self as Repr<[u8]>>::T {
-        let mut arr = [0; Self::LENGTH];
-        arr[..libsecp256k1::util::SECRET_KEY_SIZE].copy_from_slice(self.1.serialize().as_ref());
-        arr[libsecp256k1::util::SECRET_KEY_SIZE..].copy_from_slice(self.0.serialize().as_ref());
-        arr
-    }
-}
-
-impl TryFromRef<[u8]> for Keypair {
-    type Error = ParseKeypairError;
-    fn try_from_ref(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let hdl = |err| ParseKeypairError::InvalidEncoding(std::io::Error::new(ErrorKind::InvalidInput, err));
-        let sk_arr = bytes[..libsecp256k1::util::SECRET_KEY_SIZE].try_into().unwrap();
-        let seckey = libsecp256k1::SecretKey::parse(sk_arr).map_err(hdl)?;
-        let cpubkey = libsecp256k1::PublicKey::from_secret_key(&seckey);
-        let pk_arr = bytes[libsecp256k1::util::SECRET_KEY_SIZE..].try_into().unwrap();
-        let pubkey = libsecp256k1::PublicKey::parse(pk_arr).map_err(hdl)?;
-        if pubkey == cpubkey {
-            Ok(Self(pubkey, seckey))
-        } else {
-            Err(ParseKeypairError::MismatchedParts)
-        }
-    }
-}
-
 impl Display for Keypair {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let bytes: <Self as Repr<[u8]>>::T = self.into_ref();
-        write!(f, "{}", hex::encode(bytes.as_ref()))
+        write!(f, "{}", hex::encode(self.try_to_vec().unwrap()))
     }
 }
 
@@ -322,7 +230,7 @@ impl FromStr for Keypair {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let vec = hex::decode(s).map_err(ParseKeypairError::InvalidHex)?;
-        Keypair::try_from_ref(vec.as_slice())
+        Keypair::try_from_slice(vec.as_slice()).map_err(ParseKeypairError::InvalidEncoding)
     }
 }
 
