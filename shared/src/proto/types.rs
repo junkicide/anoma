@@ -84,7 +84,7 @@ impl Tx {
     }
 
     /// Sign a transaction using [`SignedTxData`].
-    pub fn sign<S: SigScheme>(self, keypair: &S::Keypair) -> Self {
+    pub fn sign<S: SigScheme>(self, keypair: &S::SecretKey) -> Self {
         let to_sign = self.to_bytes();
         let sig = S::sign(keypair, &to_sign);
         let signed = SignedTxData::<S> { data: self.data, sig }

@@ -1,7 +1,7 @@
 //! Cryptographic keys
 
 use super::{ed25519c, secp256k1};
-use super::{ParsePublicKeyError, VerifySigError, SchemeType, IntoRef, TryFromRef, ParseSecretKeyError, ParseKeypairError, ParseSignatureError, SigScheme as SigSchemeTrait};
+use super::{ParsePublicKeyError, VerifySigError, SchemeType, IntoRef, ParseSecretKeyError, ParseSignatureError, SigScheme as SigSchemeTrait};
 use std::fmt::Display;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
@@ -70,6 +70,7 @@ pub enum SecretKey {
 
 impl super::SecretKey for SecretKey {
     const TYPE: SchemeType = SigScheme::TYPE;
+    type PublicKey = PublicKey;
     fn try_from_sk<PK: super::SecretKey>(pk: &PK) -> Result<Self, ParseSecretKeyError> {
         if PK::TYPE == Self::TYPE {
             Self::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParseSecretKeyError::InvalidEncoding)
@@ -79,6 +80,15 @@ impl super::SecretKey for SecretKey {
             Ok(Self::Secp256k1(secp256k1::SecretKey::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParseSecretKeyError::InvalidEncoding)?))
         } else {
             Err(ParseSecretKeyError::MismatchedScheme)
+        }
+    }
+}
+
+impl IntoRef<PublicKey> for SecretKey {
+    fn into_ref(&self) -> PublicKey {
+        match self {
+            SecretKey::Ed25519(sk) => PublicKey::Ed25519(sk.into_ref()),
+            SecretKey::Secp256k1(sk) => PublicKey::Secp256k1(sk.into_ref()),
         }
     }
 }
@@ -130,76 +140,6 @@ impl super::Signature for Signature {
     }
 }
 
-/// Keypair
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-pub enum Keypair {
-    /// Encapsulate Ed25519 keypairs
-    Ed25519(ed25519c::Keypair),
-    /// Encapsulate Secp256k1 keypairs
-    Secp256k1(secp256k1::Keypair),
-}
-
-impl super::Keypair for Keypair {
-    const TYPE: SchemeType = SigScheme::TYPE;
-    type PublicKey = PublicKey;
-    type SecretKey = SecretKey;
-    fn try_from_kp<PK: super::Keypair>(pk: &PK) -> Result<Self, ParseKeypairError> {
-        let buf = pk.try_to_vec().unwrap();
-        if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(buf.as_slice()).map_err(ParseKeypairError::InvalidEncoding)
-        } else if PK::TYPE == ed25519c::Keypair::TYPE {
-            Ok(Self::Ed25519(ed25519c::Keypair::try_from_slice(buf.as_slice()).map_err(ParseKeypairError::InvalidEncoding)?))
-        } else if PK::TYPE == secp256k1::Keypair::TYPE {
-            Ok(Self::Secp256k1(secp256k1::Keypair::try_from_slice(buf.as_slice()).map_err(ParseKeypairError::InvalidEncoding)?))
-        } else {
-            Err(ParseKeypairError::MismatchedScheme)
-        }
-    }
-}
-
-impl Display for Keypair {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.try_to_vec().unwrap()))
-    }
-}
-
-impl IntoRef<(PublicKey, SecretKey)> for Keypair {
-    fn into_ref(&self) -> (PublicKey, SecretKey) {
-        match self {
-            Keypair::Ed25519(kp) => {
-                let (pk, sk) = kp.into_ref();
-                (PublicKey::Ed25519(pk), SecretKey::Ed25519(sk))
-            }, Keypair::Secp256k1(kp) => {
-                let (pk, sk) = kp.into_ref();
-                (PublicKey::Secp256k1(pk), SecretKey::Secp256k1(sk))
-            }
-        }
-    }
-}
-
-impl TryFromRef<(PublicKey, SecretKey)> for Keypair {
-    type Error = ParseKeypairError;
-    fn try_from_ref(kp: &(PublicKey, SecretKey)) -> Result<Self, Self::Error> {
-        match kp.clone() {
-            (PublicKey::Ed25519(pk), SecretKey::Ed25519(sk)) => {
-                TryFromRef::try_from_ref(&(pk, sk)).map(Keypair::Ed25519)
-            },
-            (PublicKey::Secp256k1(pk), SecretKey::Secp256k1(sk)) => {
-                TryFromRef::try_from_ref(&(pk, sk)).map(Keypair::Secp256k1)
-            },
-            _ => Err(ParseKeypairError::MismatchedScheme),
-        }
-    }
-}
-
-impl FromStr for Keypair {
-    type Err = ParseKeypairError;
-    fn from_str(str: &str) -> Result<Self, Self::Err> {
-        let vec = hex::decode(str).map_err(ParseKeypairError::InvalidHex)?;
-        Self::try_from_slice(vec.as_slice()).map_err(ParseKeypairError::InvalidEncoding)
-    }
-}
-
 /// An implementation of the common signature scheme
 #[derive(
     Debug,
@@ -218,7 +158,6 @@ impl FromStr for Keypair {
 pub struct SigScheme;
 
 impl super::SigScheme for SigScheme {
-    type Keypair = Keypair;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
     type Signature = Signature;
@@ -226,22 +165,22 @@ impl super::SigScheme for SigScheme {
     const TYPE: SchemeType = SchemeType::Common;
     
     #[cfg(feature = "rand")]
-    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<Keypair>
+    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<SecretKey>
     where
         R: CryptoRng + RngCore,
     {
         if sch == ed25519c::SigScheme::TYPE {
-            ed25519c::SigScheme::generate(csprng, sch).map(Keypair::Ed25519)
+            ed25519c::SigScheme::generate(csprng, sch).map(SecretKey::Ed25519)
         } else if sch == secp256k1::SigScheme::TYPE {
-            secp256k1::SigScheme::generate(csprng, sch).map(Keypair::Secp256k1)
+            secp256k1::SigScheme::generate(csprng, sch).map(SecretKey::Secp256k1)
         } else { None }
     }
 
-    fn sign(keypair: &Keypair, data: impl AsRef<[u8]>) -> Self::Signature {
+    fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
         match keypair {
-            Keypair::Ed25519(kp) =>
+            SecretKey::Ed25519(kp) =>
                 Signature::Ed25519(ed25519c::SigScheme::sign(kp, data)),
-            Keypair::Secp256k1(kp) =>
+            SecretKey::Secp256k1(kp) =>
                 Signature::Secp256k1(secp256k1::SigScheme::sign(kp, data)),
         }
     }

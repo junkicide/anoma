@@ -187,7 +187,7 @@ pub mod wrapper_tx {
         /// transaction
         pub fn new(
             fee: Fee,
-            keypair: &ed25519c::Keypair,
+            keypair: &ed25519c::SecretKey,
             epoch: Epoch,
             gas_limit: GasLimit,
             tx: Tx,
@@ -197,7 +197,7 @@ pub mod wrapper_tx {
             let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), pubkey);
             Self {
                 fee,
-                pk: keypair.public_part().clone(),
+                pk: keypair.into_ref(),
                 epoch,
                 gas_limit,
                 inner_tx,
@@ -240,8 +240,8 @@ pub mod wrapper_tx {
         }
 
         /// Sign the wrapper transaction and convert to a normal Tx type
-        pub fn sign(&self, keypair: &ed25519c::Keypair) -> Result<Tx, WrapperTxErr> {
-            if self.pk != keypair.public_part() {
+        pub fn sign(&self, keypair: &ed25519c::SecretKey) -> Result<Tx, WrapperTxErr> {
+            if self.pk != keypair.into_ref() {
                 return Err(WrapperTxErr::InvalidKeyPair);
             }
             Ok(Tx::new(
@@ -323,7 +323,7 @@ pub mod wrapper_tx {
         use super::*;
         use crate::types::address::xan;
 
-        fn gen_keypair() -> ed25519c::Keypair {
+        fn gen_keypair() -> ed25519c::SecretKey {
             use rand::prelude::ThreadRng;
             use rand::thread_rng;
 
@@ -451,7 +451,7 @@ pub mod wrapper_tx {
             tx.data = Some(signed_tx_data.try_to_vec().expect("Test failed"));
 
             // check that the signature is not valid
-            tx.verify_sig::<ed25519c::SigScheme>(&keypair.public_part(), &signed_tx_data.sig)
+            tx.verify_sig::<ed25519c::SigScheme>(&keypair.into_ref(), &signed_tx_data.sig)
                 .expect_err("Test failed");
             // check that the try from method also fails
             let err = crate::types::transaction::process_tx(tx)

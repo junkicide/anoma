@@ -604,11 +604,9 @@ pub fn genesis() -> Genesis {
     // `tests::gen_genesis_validator` below.
     let consensus_keypair = wallet::defaults::validator_keypair();
     let account_keypair = wallet::defaults::validator_keypair();
-    let staking_reward_keypair = ed25519c::Keypair::try_from_slice(&[
+    let staking_reward_keypair = ed25519c::SecretKey::try_from_slice(&[
         61, 198, 87, 204, 44, 94, 234, 228, 217, 72, 245, 27, 40, 2, 151, 174,
         24, 247, 69, 6, 9, 30, 44, 16, 88, 238, 77, 162, 243, 125, 240, 206,
-        111, 92, 66, 23, 105, 211, 33, 236, 5, 208, 17, 88, 177, 112, 100, 154,
-        1, 132, 143, 67, 162, 121, 136, 247, 20, 67, 4, 27, 226, 63, 47, 57,
     ])
     .unwrap();
     let address = wallet::defaults::validator_address();
@@ -618,10 +616,10 @@ pub fn genesis() -> Genesis {
             address,
             staking_reward_address,
             tokens: token::Amount::whole(200_000),
-            consensus_key: consensus_keypair.public_part(),
-            staking_reward_key: staking_reward_keypair.public_part(),
+            consensus_key: consensus_keypair.into_ref(),
+            staking_reward_key: staking_reward_keypair.into_ref(),
         },
-        account_key: account_keypair.public_part(),
+        account_key: account_keypair.into_ref(),
         non_staked_balance: token::Amount::whole(100_000),
         // TODO replace with https://github.com/anoma/anoma/issues/25)
         validator_vp_code_path: vp_user_path.into(),
@@ -639,32 +637,32 @@ pub fn genesis() -> Genesis {
         address: wallet::defaults::albert_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::albert_keypair().public_part()),
+        public_key: Some(wallet::defaults::albert_keypair().into_ref()),
         storage: HashMap::default(),
     };
     let bertha = EstablishedAccount {
         address: wallet::defaults::bertha_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::bertha_keypair().public_part()),
+        public_key: Some(wallet::defaults::bertha_keypair().into_ref()),
         storage: HashMap::default(),
     };
     let christel = EstablishedAccount {
         address: wallet::defaults::christel_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::christel_keypair().public_part()),
+        public_key: Some(wallet::defaults::christel_keypair().into_ref()),
         storage: HashMap::default(),
     };
     let matchmaker = EstablishedAccount {
         address: wallet::defaults::matchmaker_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::matchmaker_keypair().public_part()),
+        public_key: Some(wallet::defaults::matchmaker_keypair().into_ref()),
         storage: HashMap::default(),
     };
     let implicit_accounts = vec![ImplicitAccount {
-        public_key: wallet::defaults::daewon_keypair().public_part(),
+        public_key: wallet::defaults::daewon_keypair().into_ref(),
     }];
     let default_user_tokens = token::Amount::whole(1_000_000);
     let default_key_tokens = token::Amount::whole(1_000);

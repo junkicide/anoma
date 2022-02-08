@@ -80,19 +80,6 @@ pub enum ParseSignatureError {
 
 #[allow(missing_docs)]
 #[derive(Error, Debug)]
-pub enum ParseKeypairError {
-    #[error("Invalid keypair hex: {0}")]
-    InvalidHex(hex::FromHexError),
-    #[error("Invalid keypair encoding: {0}")]
-    InvalidEncoding(std::io::Error),
-    #[error("Parsed key pair does not belong to desired scheme")]
-    MismatchedScheme,
-    #[error("Given public and secret keys do not form key pair")]
-    MismatchedParts,
-}
-
-#[allow(missing_docs)]
-#[derive(Error, Debug)]
 pub enum ParseSecretKeyError {
     #[error("Invalid secret key hex: {0}")]
     InvalidHex(hex::FromHexError),
@@ -179,52 +166,22 @@ pub trait PublicKey : BorshSerialize
 pub trait SecretKey : BorshSerialize
     + BorshDeserialize
     + Display
+    + Debug
+    + IntoRef<Self::PublicKey>
     + FromStr<Err = ParseSecretKeyError>
-    + Clone {
+    + Clone
+    + Sync
+    + Send {
         /// The scheme type of this implementation
         const TYPE: SchemeType;
+        /// Represents the public part of this keypair
+        type PublicKey: PublicKey;
         /// Convert from one SecretKey type to another
         fn try_from_sk<PK: SecretKey>(pk: &PK) -> Result<Self, ParseSecretKeyError> {
             if PK::TYPE == Self::TYPE {
                 Self::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParseSecretKeyError::InvalidEncoding)
             } else {
                 Err(ParseSecretKeyError::MismatchedScheme)
-            }
-        }
-    }
-
-/// Represents a keypair
-
-pub trait Keypair : Display
-    + IntoRef<(Self::PublicKey, Self::SecretKey)>
-    + TryFromRef<(Self::PublicKey, Self::SecretKey), Error = ParseKeypairError>
-    + FromStr<Err = ParseKeypairError>
-    + BorshSerialize
-    + BorshDeserialize
-    + Debug
-    + Sync
-    + Send
-    + Clone {
-        /// The scheme type of this implementation
-        const TYPE: SchemeType;
-        /// Represents the public part of this keypair
-        type PublicKey: PublicKey;
-        /// Represents the secret part of this keypair
-        type SecretKey: SecretKey;
-        /// Get the public part of a given key pair
-        fn public_part(&self) -> Self::PublicKey {
-            IntoRef::<(Self::PublicKey, Self::SecretKey)>::into_ref(self).0
-        }
-        /// Get the secret part of a given key pair
-        fn secret_part(&self) -> Self::SecretKey {
-            IntoRef::<(Self::PublicKey, Self::SecretKey)>::into_ref(self).1
-        }
-        /// Convert from one Keypair type to another
-        fn try_from_kp<PK: Keypair>(pk: &PK) -> Result<Self, ParseKeypairError> {
-            if PK::TYPE == Self::TYPE {
-                Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseKeypairError::InvalidEncoding)
-            } else {
-                Err(ParseKeypairError::MismatchedScheme)
             }
         }
     }
@@ -241,18 +198,15 @@ pub trait SigScheme : Eq + Ord + Debug + Serialize + Default {
     type PublicKey: 'static + PublicKey;
     /// Represents the secret key for this scheme
     type SecretKey: 'static + SecretKey;
-    /// Represents the keypair for this scheme
-    type Keypair: 'static + Keypair
-        <PublicKey = Self::PublicKey, SecretKey = Self::SecretKey>;
     /// The scheme type of this implementation
     const TYPE: SchemeType;
     /// Generate a keypair.
     #[cfg(feature = "rand")]
-    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<Self::Keypair>
+    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<Self::SecretKey>
     where
         R: CryptoRng + RngCore;
     /// Sign the data with a key.
-    fn sign(keypair: &Self::Keypair, data: impl AsRef<[u8]>)
+    fn sign(keypair: &Self::SecretKey, data: impl AsRef<[u8]>)
     -> Self::Signature;
     /// Check that the public key matches the signature on the given data.
     fn verify_signature<T: BorshSerialize + BorshDeserialize>(
@@ -339,7 +293,7 @@ where
     T: BorshSerialize + BorshDeserialize,
 {
     /// Initialize a new signed data.
-    pub fn new(keypair: &S::Keypair, data: T) -> Self {
+    pub fn new(keypair: &S::SecretKey, data: T) -> Self {
         let to_sign = data
             .try_to_vec()
             .expect("Encoding data for signing shouldn't fail");
@@ -433,33 +387,29 @@ pub mod testing {
     use super::{SigScheme, SchemeType};
 
     /// A keypair for tests
-    pub fn keypair_1() -> <ed25519c::SigScheme as SigScheme>::Keypair {
+    pub fn keypair_1() -> <ed25519c::SigScheme as SigScheme>::SecretKey {
         // generated from `cargo test gen_keypair -- --nocapture`
         let bytes = [
             33, 82, 91, 186, 100, 168, 220, 158, 185, 140, 63, 172, 3, 88, 52,
             113, 94, 30, 213, 84, 175, 184, 235, 169, 70, 175, 36, 252, 45,
-            190, 138, 79, 210, 187, 198, 90, 69, 83, 156, 77, 199, 63, 208, 63,
-            137, 102, 22, 229, 110, 195, 38, 174, 142, 127, 157, 224, 139, 212,
-            239, 204, 58, 80, 108, 184,
+            190, 138, 79,
         ];
-        <ed25519c::SigScheme as SigScheme>::Keypair::try_from_slice(bytes.as_ref()).unwrap().into()
+        <ed25519c::SigScheme as SigScheme>::SecretKey::try_from_slice(bytes.as_ref()).unwrap().into()
     }
 
     /// A keypair for tests
-    pub fn keypair_2() -> <ed25519c::SigScheme as SigScheme>::Keypair {
+    pub fn keypair_2() -> <ed25519c::SigScheme as SigScheme>::SecretKey {
         // generated from `cargo test gen_keypair -- --nocapture`
         let bytes = [
             27, 238, 157, 32, 131, 242, 184, 142, 146, 189, 24, 249, 68, 165,
             205, 71, 213, 158, 25, 253, 52, 217, 87, 52, 171, 225, 110, 131,
-            238, 58, 94, 56, 218, 133, 189, 80, 14, 157, 68, 124, 151, 37, 127,
-            173, 117, 91, 248, 234, 34, 13, 77, 148, 10, 75, 30, 191, 172, 85,
-            175, 8, 36, 233, 18, 203,
+            238, 58, 94, 56,
         ];
-        <ed25519c::SigScheme as SigScheme>::Keypair::try_from_slice(bytes.as_ref()).unwrap().into()
+        <ed25519c::SigScheme as SigScheme>::SecretKey::try_from_slice(bytes.as_ref()).unwrap().into()
     }
 
     /// Generate an arbitrary [`Keypair`].
-    pub fn arb_keypair<S: SigScheme>(id: SchemeType) -> impl Strategy<Value = S::Keypair> {
+    pub fn arb_keypair<S: SigScheme>(id: SchemeType) -> impl Strategy<Value = S::SecretKey> {
         any::<[u8; 32]>().prop_map(move |seed| {
             let mut rng = StdRng::from_seed(seed);
             S::generate(&mut rng, id).unwrap().into()
@@ -467,7 +417,7 @@ pub mod testing {
     }
 
     /// Generate a new random [`Keypair`].
-    pub fn gen_keypair<S: SigScheme>(id: SchemeType) -> S::Keypair {
+    pub fn gen_keypair<S: SigScheme>(id: SchemeType) -> S::SecretKey {
         let mut rng: ThreadRng = thread_rng();
         S::generate(&mut rng, id).unwrap()
     }
@@ -496,8 +446,8 @@ macro_rules! sigscheme_test {
             /// new keypair.
             #[test]
             fn gen_keypair1() {
-                let keypair = testing::gen_keypair::<$type>($sid);
-                let (public_key, secret_key) = keypair.into_ref();
+                let secret_key = testing::gen_keypair::<$type>($sid);
+                let public_key = secret_key.into_ref();
                 println!("Public key: {}", public_key);
                 println!("Secret key: {}", secret_key);
             }

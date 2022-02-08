@@ -236,7 +236,7 @@ pub mod tx_types {
         use crate::types::address::xan;
         use crate::types::storage::Epoch;
 
-        fn gen_keypair() -> ed25519c::Keypair {
+        fn gen_keypair() -> ed25519c::SecretKey {
             use rand::prelude::ThreadRng;
             use rand::thread_rng;
 

@@ -11,7 +11,7 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ParsePublicKeyError, IntoRef, TryFromRef, VerifySigError, SchemeType, ParseSecretKeyError, ParseKeypairError, ParseSignatureError, SigScheme as SigSchemeTrait
+    ParsePublicKeyError, IntoRef, VerifySigError, SchemeType, ParseSecretKeyError, ParseSignatureError, SigScheme as SigSchemeTrait
 };
 
 /// Ed25519 public key
@@ -96,6 +96,8 @@ pub struct SecretKey(pub ed25519_consensus::SigningKey);
 impl super::SecretKey for SecretKey {
     const TYPE: SchemeType = SigScheme::TYPE;
 
+    type PublicKey = PublicKey;
+
     fn try_from_sk<PK: super::SecretKey>(pk: &PK) -> Result<Self, ParseSecretKeyError> {
         if PK::TYPE == super::common::SecretKey::TYPE {
             super::common::SecretKey::try_from_sk(pk).and_then(|x| match x {
@@ -107,6 +109,12 @@ impl super::SecretKey for SecretKey {
         } else {
             Err(ParseSecretKeyError::MismatchedScheme)
         }
+    }
+}
+
+impl IntoRef<PublicKey> for SecretKey {
+    fn into_ref(&self) -> PublicKey {
+        PublicKey(self.0.verification_key())
     }
 }
 
@@ -141,77 +149,6 @@ impl FromStr for SecretKey {
         let vec = hex::decode(s).map_err(ParseSecretKeyError::InvalidHex)?;
         BorshDeserialize::try_from_slice(&vec)
             .map_err(ParseSecretKeyError::InvalidEncoding)
-    }
-}
-
-/// Ed25519 keypair
-#[derive(Debug, Clone)]
-pub struct Keypair(pub ed25519_consensus::VerificationKey, pub ed25519_consensus::SigningKey);
-
-impl super::Keypair for Keypair {
-    const TYPE: SchemeType = SigScheme::TYPE;
-    type PublicKey = PublicKey;
-    type SecretKey = SecretKey;
-
-    fn try_from_kp<PK: super::Keypair>(pk: &PK) -> Result<Self, ParseKeypairError> {
-        if PK::TYPE == super::common::Keypair::TYPE {
-            super::common::Keypair::try_from_kp(pk).and_then(|x| match x {
-                super::common::Keypair::Ed25519(epk) => Ok(epk),
-                _ => Err(ParseKeypairError::MismatchedScheme)
-            })
-        } else if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseKeypairError::InvalidEncoding)
-        } else {
-            Err(ParseKeypairError::MismatchedScheme)
-        }
-    }
-}
-
-impl IntoRef<(PublicKey, SecretKey)> for Keypair {
-    fn into_ref(&self) -> (PublicKey, SecretKey) {
-        (PublicKey(self.0), SecretKey(self.1))
-    }
-}
-
-impl TryFromRef<(PublicKey, SecretKey)> for Keypair {
-    type Error = ParseKeypairError;
-    fn try_from_ref(kp: &(PublicKey, SecretKey)) -> Result<Self, Self::Error> {
-        Ok(Self(kp.0.0, kp.1.0))
-    }
-}
-
-impl BorshSerialize for Keypair {
-    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        BorshSerialize::serialize(&self.1.to_bytes(), writer)?;
-        BorshSerialize::serialize(&self.0.to_bytes(), writer)
-    }
-}
-
-impl BorshDeserialize for Keypair {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        let hdl = |e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e);
-        let sk: ed25519_consensus::SigningKey = <[u8; ed25519_dalek::SECRET_KEY_LENGTH] as BorshDeserialize>::deserialize(buf)?.into();
-        let pk: ed25519_consensus::VerificationKey = <[u8; ed25519_dalek::PUBLIC_KEY_LENGTH] as BorshDeserialize>::deserialize(buf)?.try_into().map_err(hdl)?;
-        if pk == sk.verification_key() {
-            Ok(Keypair(pk, sk))
-        } else {
-            Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, ParseKeypairError::MismatchedParts))
-        }
-    }
-}
-
-impl Display for Keypair {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(self.try_to_vec().unwrap().as_slice()))
-    }
-}
-
-impl FromStr for Keypair {
-    type Err = ParseKeypairError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let vec = hex::decode(s).map_err(ParseKeypairError::InvalidHex)?;
-        Keypair::try_from_slice(vec.as_slice()).map_err(ParseKeypairError::InvalidEncoding)
     }
 }
 
@@ -283,7 +220,6 @@ impl PartialOrd for Signature {
 pub struct SigScheme;
 
 impl super::SigScheme for SigScheme {
-    type Keypair = Keypair;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
     type Signature = Signature;
@@ -291,18 +227,17 @@ impl super::SigScheme for SigScheme {
     const TYPE: SchemeType = SchemeType::Ed25519Consensus;
     
     #[cfg(feature = "rand")]
-    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<Keypair>
+    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<SecretKey>
     where
         R: CryptoRng + RngCore,
     {
         if sch == Self::TYPE {
-            let sk = ed25519_consensus::SigningKey::new(csprng);
-            Some(Keypair((&sk).into(), sk))
+            Some(SecretKey(ed25519_consensus::SigningKey::new(csprng)))
         } else { None }
     }
 
-    fn sign(keypair: &Keypair, data: impl AsRef<[u8]>) -> Self::Signature {
-        Signature((&keypair.1).sign(data.as_ref()))
+    fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {
+        Signature(keypair.0.sign(data.as_ref()))
     }
 
     fn verify_signature<T: BorshSerialize>(

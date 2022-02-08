@@ -51,7 +51,7 @@ impl Store {
         // Pre-load the default keys without encryption
         let no_password = None;
         for (alias, keypair) in super::defaults::keys() {
-            let pkh: PublicKeyHash = (&keypair.public_part()).into();
+            let pkh: PublicKeyHash = (&keypair.into_ref()).into();
             store.keys.insert(
                 alias.clone(),
                 StoredKeypair::new(keypair, no_password.clone()).0,
@@ -218,7 +218,7 @@ impl Store {
         &self.addresses
     }
 
-    fn generate_keypair() -> ed25519c::Keypair {
+    fn generate_keypair() -> ed25519c::SecretKey {
         use rand::rngs::OsRng;
         let mut csprng = OsRng {};
         ed25519c::SigScheme::generate(&mut csprng, ed25519c::SigScheme::TYPE).unwrap()
@@ -233,9 +233,9 @@ impl Store {
         &mut self,
         alias: Option<String>,
         password: Option<String>,
-    ) -> (String, Rc<ed25519c::Keypair>) {
+    ) -> (String, Rc<ed25519c::SecretKey>) {
         let keypair = Self::generate_keypair();
-        let pkh: PublicKeyHash = PublicKeyHash::from(&keypair.public_part());
+        let pkh: PublicKeyHash = PublicKeyHash::from(&keypair.into_ref());
         let (keypair_to_store, raw_keypair) =
             StoredKeypair::new(keypair, password);
         let address = Address::Implicit(ImplicitAddress::Ed25519(pkh.clone()));

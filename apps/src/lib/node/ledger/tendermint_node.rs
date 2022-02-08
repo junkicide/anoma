@@ -219,7 +219,7 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
 pub async fn write_validator_key_async(
     home_dir: impl AsRef<Path>,
     address: &Address,
-    consensus_key: &ed25519c::Keypair,
+    consensus_key: &ed25519c::SecretKey,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("priv_validator_key.json");
@@ -235,7 +235,7 @@ pub async fn write_validator_key_async(
         .open(&path)
         .await
         .expect("Couldn't create private validator key file");
-    let pk: ed25519c::PublicKey = consensus_key.public_part();
+    let pk: ed25519c::PublicKey = consensus_key.into_ref();
     let pk = base64::encode(pk.try_to_vec().unwrap().as_slice());
     let ck_arr = consensus_key.try_to_vec().unwrap();
     let sk = base64::encode(ck_arr.as_slice());
@@ -262,7 +262,7 @@ pub async fn write_validator_key_async(
 pub fn write_validator_key(
     home_dir: impl AsRef<Path>,
     address: &Address,
-    consensus_key: &ed25519c::Keypair,
+    consensus_key: &ed25519c::SecretKey,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("priv_validator_key.json");
@@ -276,7 +276,7 @@ pub fn write_validator_key(
         .truncate(true)
         .open(&path)
         .expect("Couldn't create private validator key file");
-    let pk: ed25519c::PublicKey = consensus_key.public_part();
+    let pk: ed25519c::PublicKey = consensus_key.into_ref();
     let pk = base64::encode(pk.try_to_vec().unwrap());
     let ck_arr = consensus_key.try_to_vec().unwrap();
     let sk = base64::encode(ck_arr.as_slice());

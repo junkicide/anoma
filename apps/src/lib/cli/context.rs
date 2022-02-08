@@ -29,7 +29,7 @@ pub type WalletAddress = FromContext<Address>;
 
 /// A raw keypair (hex encoding), an alias, a public key or a public key hash of
 /// a keypair that may be found in the wallet
-pub type WalletKeypair = FromContext<Rc<ed25519c::Keypair>>;
+pub type WalletKeypair = FromContext<Rc<ed25519c::SecretKey>>;
 
 /// A raw public key (hex encoding), a public key hash (also hex encoding) or an
 /// alias of an public key that may be found in the wallet
@@ -231,7 +231,7 @@ impl ArgFromContext for Address {
     }
 }
 
-impl ArgFromMutContext for Rc<ed25519c::Keypair> {
+impl ArgFromMutContext for Rc<ed25519c::SecretKey> {
     fn from_mut_ctx(ctx: &mut Context, raw: impl AsRef<str>) -> Self {
         let raw = raw.as_ref();
         // A keypair can be either a raw keypair in hex string
@@ -256,12 +256,12 @@ impl ArgFromMutContext for ed25519c::PublicKey {
             FromStr::from_str(raw)
                 .map(|pkh: PublicKeyHash| {
                     let key = ctx.wallet.find_key_by_pkh(&pkh).unwrap();
-                    key.public_part().clone()
+                    key.into_ref().clone()
                 })
                 // Or it can be an alias that may be found in the wallet
                 .unwrap_or_else(|_parse_err| {
                     let key = ctx.wallet.find_key(raw).unwrap();
-                    key.public_part().clone()
+                    key.into_ref().clone()
                 })
         })
     }

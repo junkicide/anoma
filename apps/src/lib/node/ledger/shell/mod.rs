@@ -512,7 +512,7 @@ mod test_utils {
     }
 
     /// Generate a random public/private keypair
-    pub(super) fn gen_keypair() -> ed25519c::Keypair {
+    pub(super) fn gen_keypair() -> ed25519c::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 

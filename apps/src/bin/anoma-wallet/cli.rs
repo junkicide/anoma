@@ -87,11 +87,11 @@ fn key_find(
     };
     match found_keypair {
         Ok(keypair) => {
-            let pkh: PublicKeyHash = (&keypair.public_part()).into();
+            let pkh: PublicKeyHash = (&keypair.into_ref()).into();
             println!("Public key hash: {}", pkh);
-            println!("Public key: {}", keypair.public_part());
+            println!("Public key: {}", keypair.into_ref());
             if unsafe_show_secret {
-                println!("Secret key: {}", keypair.secret_part());
+                println!("Secret key: {}", keypair);
             }
         }
         Err(err) => {
@@ -131,9 +131,9 @@ fn key_list(
             }
             match stored_keypair.get(decrypt) {
                 Ok(keypair) => {
-                    writeln!(w, "    Public key: {}", keypair.public_part()).unwrap();
+                    writeln!(w, "    Public key: {}", keypair.into_ref()).unwrap();
                     if unsafe_show_secret {
-                        writeln!(w, "    Secret key: {}", keypair.secret_part())
+                        writeln!(w, "    Secret key: {}", keypair)
                             .unwrap();
                     }
                 }

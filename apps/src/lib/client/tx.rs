@@ -176,7 +176,7 @@ pub async fn submit_init_validator(
         ctx.wallet
             .gen_key(Some(validator_key_alias.clone()), unsafe_dont_encrypt)
             .1
-            .public_part()
+            .into_ref()
             .clone()
     });
 
@@ -194,7 +194,7 @@ pub async fn submit_init_validator(
             ctx.wallet
                 .gen_key(Some(rewards_key_alias.clone()), unsafe_dont_encrypt)
                 .1
-                .public_part()
+                .into_ref()
                 .clone()
         });
 
@@ -231,7 +231,7 @@ pub async fn submit_init_validator(
 
     let data = InitValidator {
         account_key,
-        consensus_key: consensus_key.public_part().clone(),
+        consensus_key: consensus_key.into_ref(),
         rewards_account_key,
         validator_vp_code,
         rewards_vp_code,
@@ -635,7 +635,7 @@ async fn sign_tx(
     tx: Tx,
     args: &args::Tx,
     default: Option<&WalletAddress>,
-) -> (Context, Tx, std::rc::Rc<ed25519c::Keypair>) {
+) -> (Context, Tx, std::rc::Rc<ed25519c::SecretKey>) {
     let (tx, keypair) = if let Some(signing_key) = &args.signing_key {
         let signing_key = ctx.get_cached(signing_key);
         (tx.sign::<ed25519c::SigScheme>(&signing_key), signing_key)
@@ -664,7 +664,7 @@ async fn process_tx(
     ctx: Context,
     args: &args::Tx,
     tx: Tx,
-    keypair: &ed25519c::Keypair,
+    keypair: &ed25519c::SecretKey,
 ) -> (Context, Vec<Address>) {
     // NOTE: use this to print the request JSON body:
 
@@ -796,7 +796,7 @@ pub fn tx_hashes(tx: &WrapperTx) -> (String, String) {
 pub async fn broadcast_tx(
     address: TendermintAddress,
     tx: WrapperTx,
-    keypair: &ed25519c::Keypair,
+    keypair: &ed25519c::SecretKey,
 ) -> Result<Response, Error> {
     // These can later be used to determine when parts of the tx make it
     // on-chain
@@ -848,7 +848,7 @@ pub async fn broadcast_tx(
 pub async fn submit_tx(
     address: TendermintAddress,
     tx: WrapperTx,
-    keypair: &ed25519c::Keypair,
+    keypair: &ed25519c::SecretKey,
 ) -> Result<TxResponse, Error> {
     let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
         WebSocketAddress::try_from(address.clone())?,

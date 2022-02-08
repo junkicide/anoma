@@ -8,7 +8,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::str::FromStr;
-use super::{ParsePublicKeyError, ParseSecretKeyError, ParseKeypairError, ParseSignatureError, TryFromRef, VerifySigError, IntoRef, SchemeType, SigScheme as SigSchemeTrait};
+use super::{ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, VerifySigError, IntoRef, SchemeType, SigScheme as SigSchemeTrait};
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 
@@ -100,6 +100,7 @@ pub struct SecretKey(libsecp256k1::SecretKey);
 
 impl super::SecretKey for SecretKey {
     const TYPE: SchemeType = SigScheme::TYPE;
+    type PublicKey = PublicKey;
 
     fn try_from_sk<PK: super::SecretKey>(pk: &PK) -> Result<Self, ParseSecretKeyError> {
         if PK::TYPE == super::common::SecretKey::TYPE {
@@ -112,6 +113,12 @@ impl super::SecretKey for SecretKey {
         } else {
             Err(ParseSecretKeyError::MismatchedScheme)
         }
+    }
+}
+
+impl IntoRef<PublicKey> for SecretKey {
+    fn into_ref(&self) -> PublicKey {
+        PublicKey(libsecp256k1::PublicKey::from_secret_key(&self.0))
     }
 }
 
@@ -196,84 +203,6 @@ impl PartialOrd for Signature {
     }
 }
 
-/// Secp256k1 key pair
-#[derive(Debug, Clone)]
-pub struct Keypair(libsecp256k1::PublicKey, libsecp256k1::SecretKey);
-
-impl super::Keypair for Keypair {
-    const TYPE: SchemeType = SigScheme::TYPE;
-    type PublicKey = PublicKey;
-    type SecretKey = SecretKey;
-
-    fn try_from_kp<PK: super::Keypair>(pk: &PK) -> Result<Self, ParseKeypairError> {
-        if PK::TYPE == super::common::Keypair::TYPE {
-            super::common::Keypair::try_from_kp(pk).and_then(|x| match x {
-                super::common::Keypair::Secp256k1(epk) => Ok(epk),
-                _ => Err(ParseKeypairError::MismatchedScheme)
-            })
-        } else if PK::TYPE == Self::TYPE {
-            Self::try_from_slice(pk.try_to_vec().unwrap().as_slice()).map_err(ParseKeypairError::InvalidEncoding)
-        } else {
-            Err(ParseKeypairError::MismatchedScheme)
-        }
-    }
-}
-
-impl Display for Keypair {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(self.try_to_vec().unwrap()))
-    }
-}
-
-impl FromStr for Keypair {
-    type Err = ParseKeypairError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let vec = hex::decode(s).map_err(ParseKeypairError::InvalidHex)?;
-        Keypair::try_from_slice(vec.as_slice()).map_err(ParseKeypairError::InvalidEncoding)
-    }
-}
-
-impl BorshDeserialize for Keypair {
-    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        // deserialize the bytes first
-        let hdl = |e| std::io::Error::new(ErrorKind::InvalidInput, format!("Error decoding secp256k1 key pair: {}", e));
-        let seckey = libsecp256k1::SecretKey::parse(&(BorshDeserialize::deserialize(buf)?)).map_err(hdl)?;
-        let pubkey = libsecp256k1::PublicKey::parse(&(BorshDeserialize::deserialize(buf)?)).map_err(hdl)?;
-        let cpubkey = libsecp256k1::PublicKey::from_secret_key(&seckey);
-        if cpubkey == pubkey {
-            Ok(Keypair(pubkey, seckey))
-        } else {
-            Err(std::io::Error::new(ErrorKind::InvalidInput, ParseKeypairError::MismatchedParts))
-        }
-    }
-}
-
-impl BorshSerialize for Keypair {
-    fn serialize<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        BorshSerialize::serialize(&self.1.serialize(), writer)?;
-        BorshSerialize::serialize(&self.0.serialize(), writer)
-    }
-}
-
-impl IntoRef<(PublicKey, SecretKey)> for Keypair {
-    fn into_ref(&self) -> (PublicKey, SecretKey) {
-        (PublicKey(self.0), SecretKey(self.1))
-    }
-}
-
-impl TryFromRef<(PublicKey, SecretKey)> for Keypair {
-    type Error = ParseKeypairError;
-    fn try_from_ref(kp: &(PublicKey, SecretKey)) -> Result<Self, Self::Error> {
-        if libsecp256k1::PublicKey::from_secret_key(&kp.1.0) == kp.0.0 {
-            Ok(Self(kp.0.0, kp.1.0))
-        } else {
-            let io_err = std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("Error: secp256k1 public key does not correspond to secret key"));
-            Err(ParseKeypairError::InvalidEncoding(io_err))
-        }
-    }
-}
-
 /// An implementation of the Secp256k1 signature scheme
 #[derive(
     Debug,
@@ -297,24 +226,21 @@ impl super::SigScheme for SigScheme {
     type Signature = Signature;
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
-    type Keypair = Keypair;
 
-    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<Self::Keypair>
+    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<Self::SecretKey>
     where R: CryptoRng + RngCore {
         if sch == Self::TYPE {
-            let seckey = libsecp256k1::SecretKey::random(csprng);
-            let pubkey = libsecp256k1::PublicKey::from_secret_key(&seckey);
-            Some(Keypair(pubkey, seckey))
+            Some(SecretKey(libsecp256k1::SecretKey::random(csprng)))
         } else {
             None
         }
     }
     
     /// Sign the data with a key.
-    fn sign(keypair: &Keypair, data: impl AsRef<[u8]>) -> Signature {
+    fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Signature {
         let message_to_sign = libsecp256k1::Message::parse_slice(&data.as_ref())
             .expect("Message encoding shouldn't fail");
-        Signature(libsecp256k1::sign(&message_to_sign, &keypair.1).0)
+        Signature(libsecp256k1::sign(&message_to_sign, &keypair.0).0)
     }
 
     /// Check that the public key matches the signature on the given data.
