@@ -237,8 +237,9 @@ pub async fn write_validator_key_async(
         .expect("Couldn't create private validator key file");
     let pk: ed25519c::PublicKey = consensus_key.into_ref();
     let pk = base64::encode(pk.try_to_vec().unwrap().as_slice());
-    let ck_arr = consensus_key.try_to_vec().unwrap();
-    let sk = base64::encode(ck_arr.as_slice());
+    let ck_arr =
+        [consensus_key.try_to_vec().unwrap(),
+         consensus_key.into_ref().try_to_vec().unwrap()].concat();
     let address = address.raw_hash().unwrap();
     let key = json!({
        "address": address,
@@ -248,7 +249,7 @@ pub async fn write_validator_key_async(
        },
        "priv_key": {
          "type": "tendermint/PrivKeyEd25519",
-         "value": sk,
+         "value": base64::encode(ck_arr),
       }
     });
     let data = serde_json::to_vec_pretty(&key)
@@ -278,8 +279,9 @@ pub fn write_validator_key(
         .expect("Couldn't create private validator key file");
     let pk: ed25519c::PublicKey = consensus_key.into_ref();
     let pk = base64::encode(pk.try_to_vec().unwrap());
-    let ck_arr = consensus_key.try_to_vec().unwrap();
-    let sk = base64::encode(ck_arr.as_slice());
+    let ck_arr =
+        [consensus_key.try_to_vec().unwrap(),
+         consensus_key.into_ref().try_to_vec().unwrap()].concat();
     let address = address.raw_hash().unwrap();
     let key = json!({
        "address": address,
@@ -289,7 +291,7 @@ pub fn write_validator_key(
        },
        "priv_key": {
          "type": "tendermint/PrivKeyEd25519",
-         "value": sk,
+         "value": base64::encode(ck_arr),
       }
     });
     serde_json::to_writer_pretty(file, &key)

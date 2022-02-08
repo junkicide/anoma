@@ -223,15 +223,18 @@ pub fn init_network(
         let validator_dir = accounts_dir.join(name);
 
         // Generate a node key
-        let node_keypair = ed25519c::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap();
+        let node_seckey = ed25519c::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap();
         let node_pk: ed25519_consensus::VerificationKey =
-            node_keypair.into_ref().clone().0;
+            node_seckey.into_ref().clone().0;
 
         // Derive the node ID from the node key
         let node_id: TendermintNodeId = id_from_pk(node_pk);
 
         // Convert and write the keypair into Tendermint node_key.json file
-        let tm_node_key = base64::encode(node_keypair.try_to_vec().unwrap().as_slice());
+        let node_keypair =
+            [node_seckey.try_to_vec().unwrap(),
+             node_seckey.into_ref().try_to_vec().unwrap()].concat();
+        let tm_node_key = base64::encode(node_keypair);
         let tm_node_keypair_json = json!({
             "priv_key": {
                 "type": "tendermint/PrivKeyEd25519",
