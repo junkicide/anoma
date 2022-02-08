@@ -1,19 +1,25 @@
 //! Client RPC queries
 
+// TODO: remove references to apps crate
+// TODO: in apps crate fix imports of this module
+// TODO: move error and stdout prints to app folder
+// TODO: Factor out the code's side-effects to allow to query storage data with any client that impl tendermint_rpc::client::Client and return the typed values (e.g. Result<pos::Bonds, QueryError>
+// TODO: testing?
+
 use std::borrow::Cow;
 use std::convert::TryInto;
 use std::io::{self, Write};
 
-use anoma::ledger::pos::types::{
+use crate::ledger::pos::types::{
     Epoch as PosEpoch, VotingPower, WeightedValidator,
 };
-use anoma::ledger::pos::{
+use crate::ledger::pos::{
     self, is_validator_slashes_key, Bonds, Slash, Unbonds,
 };
-use anoma::types::address::Address;
-use anoma::types::key::ed25519;
-use anoma::types::storage::Epoch;
-use anoma::types::{address, storage, token};
+use crate::types::address::Address;
+use crate::types::key::ed25519;
+use crate::types::storage::Epoch;
+use crate::types::{address, storage, token};
 use borsh::BorshDeserialize;
 use itertools::Itertools;
 #[cfg(not(feature = "ABCI"))]
@@ -41,9 +47,7 @@ use tendermint_rpc_abci::{Order, SubscriptionClient, WebSocketClient};
 #[cfg(feature = "ABCI")]
 use tendermint_stable::abci::Code;
 
-use crate::cli::{self, args, Context};
-use crate::client::tx::TxResponse;
-use crate::node::ledger::rpc::{Path, PrefixValue};
+use crate::node::ledger::rpc::{Path, PrefixValue}; //FIXME:
 
 /// Query the epoch of the last committed block
 pub async fn query_epoch(args: args::Query) -> Epoch {

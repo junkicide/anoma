@@ -124,6 +124,90 @@ pub struct InitValidator {
     pub rewards_vp_code: Vec<u8>,
 }
 
+/// A data type to represent the response of a tx.
+#[derive(Debug, Serialize)]
+pub struct TxResponse {
+    pub info: String,
+    pub height: String,
+    pub hash: String,
+    pub code: String,
+    pub gas_used: String,
+    pub initialized_accounts: Vec<Address>,
+}
+
+impl TxResponse {
+    pub fn find_tx(json: serde_json::Value, tx_hash: String) -> Self {
+        let tx_hash_json = serde_json::Value::String(tx_hash.clone());
+        let mut selector = jsonpath::selector(&json); //FIXME: import
+        let mut index = 0;
+        #[cfg(feature = "ABCI")]
+        let evt_key = "applied";
+        #[cfg(not(feature = "ABCI"))]
+        let evt_key = "accepted";
+        // Find the tx with a matching hash
+        let hash = loop {
+            if let Ok(hash) =
+                selector(&format!("$.events.['{}.hash'][{}]", evt_key, index))
+            {
+                let hash = hash[0].clone();
+                if hash == tx_hash_json {
+                    break hash;
+                } else {
+                    index += 1;
+                }
+            } else {
+                eprintln!( //FIXME: remove this print
+                    "Couldn't find tx with hash {} in the event string {}",
+                    tx_hash, json
+                );
+                safe_exit(1)
+            }
+        };
+        let info =
+            selector(&format!("$.events.['{}.info'][{}]", evt_key, index))
+                .unwrap();
+        let height =
+            selector(&format!("$.events.['{}.height'][{}]", evt_key, index))
+                .unwrap();
+        let code =
+            selector(&format!("$.events.['{}.code'][{}]", evt_key, index))
+                .unwrap();
+        let gas_used =
+            selector(&format!("$.events.['{}.gas_used'][{}]", evt_key, index))
+                .unwrap();
+        let initialized_accounts = selector(&format!(
+            "$.events.['{}.initialized_accounts'][{}]",
+            evt_key, index
+        ));
+        let initialized_accounts = match initialized_accounts {
+            Ok(values) if !values.is_empty() => {
+                // In a response, the initialized accounts are encoded as e.g.:
+                // ```
+                // "applied.initialized_accounts": Array([
+                //   String(
+                //     "[\"atest1...\"]",
+                //   ),
+                // ]),
+                // ...
+                // So we need to decode the inner string first ...
+                let raw: String =
+                    serde_json::from_value(values[0].clone()).unwrap();
+                // ... and then decode the vec from the array inside the string
+                serde_json::from_str(&raw).unwrap()
+            }
+            _ => vec![],
+        };
+        TxResponse {
+            info: serde_json::from_value(info[0].clone()).unwrap(),
+            height: serde_json::from_value(height[0].clone()).unwrap(),
+            hash: serde_json::from_value(hash).unwrap(),
+            code: serde_json::from_value(code[0].clone()).unwrap(),
+            gas_used: serde_json::from_value(gas_used[0].clone()).unwrap(),
+            initialized_accounts,
+        }
+    }
+}
+
 /// Module that includes helper functions for classifying
 /// different types of transactions that the ledger
 /// must support as well as conversion functions
