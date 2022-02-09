@@ -3,10 +3,10 @@
 // TODO: remove Context and args from functions' parameters
 // TODO: Factor out the code's side-effects to allow to query storage data with any client that impl tendermint_rpc::client::Client and return the typed values (e.g. Result<pos::Bonds, QueryError>
 //      -> Replace all mentions to HttpClient with impl tendermint_rpc::client::Client
-//      -> Do the same also for WebSocketClient?
+//      -> Do the same also for SubscriptionClient?
 // TODO: move error and stdout prints to app folder (where these functions are actually called)
 // TODO: testing?
-// TODO: return Results
+// TODO: return Results instead of printing
 // TODO: remove cli::safe_exit()
 // TODO: fix all TODOs and FIXMEs left around also in other files
 
@@ -52,9 +52,10 @@ use tendermint_rpc_abci::{Order, SubscriptionClient, WebSocketClient};
 #[cfg(feature = "ABCI")]
 use tendermint_stable::abci::Code;
 
+// TODO: create custom error, QueryError
+
 /// Query the epoch of the last committed block
-pub async fn query_epoch(args: args::Query) -> Epoch {
-    let client = HttpClient::new(args.ledger_address).unwrap();
+pub async fn query_epoch(client: impl Client) -> Result<Epoch, QueryError> {
     let path = Path::Epoch;
     let data = vec![];
     let response = client
@@ -81,16 +82,22 @@ pub async fn query_epoch(args: args::Query) -> Epoch {
 }
 
 /// Query token balance(s)
-pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
+/// 
+/// Arguments owner and token are Options, the function will produce a result
+/// based on the effective values of these arguments.
+/// 
+/// Cases (token, owner):
+///     Some, Some: returns the balance of token for owner
+///     None, Some: returns the balances of all the tokens owned by owner
+///     Some, None: returns the balances of token for all the users owning token
+///     None, None: returns the balances of all the tokens for all the users
+pub async fn query_balance(client: impl Client, token: Option<&Address>, owner: Option<&Address>){
     let tokens = address::tokens();
-    match (args.token, args.owner) {
+    match (token, owner) {
         (Some(token), Some(owner)) => {
-            let token = ctx.get(&token);
-            let owner = ctx.get(&owner);
-            let key = token::balance_key(&token, &owner);
+            let key = token::balance_key(token, owner);
             let currency_code = tokens
-                .get(&token)
+                .get(token)
                 .map(|c| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
             match query_storage_value::<token::Amount>(client, key).await {
@@ -103,10 +110,9 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
             }
         }
         (None, Some(owner)) => {
-            let owner = ctx.get(&owner);
             let mut found_any = false;
             for (token, currency_code) in tokens {
-                let key = token::balance_key(&token, &owner);
+                let key = token::balance_key(&token, owner);
                 if let Some(balance) =
                     query_storage_value::<token::Amount>(client.clone(), key)
                         .await
@@ -120,14 +126,13 @@ pub async fn query_balance(ctx: Context, args: args::QueryBalance) {
             }
         }
         (Some(token), None) => {
-            let token = ctx.get(&token);
-            let key = token::balance_prefix(&token);
+            let key = token::balance_prefix(token);
             let balances =
                 query_storage_prefix::<token::Amount>(client, key).await;
             match balances {
                 Some(balances) => {
                     let currency_code = tokens
-                        .get(&token)
+                        .get(token)
                         .map(|c| Cow::Borrowed(*c))
                         .unwrap_or_else(|| Cow::Owned(token.to_string()));
                     let stdout = io::stdout();
