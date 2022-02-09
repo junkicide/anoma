@@ -5,7 +5,7 @@ use std::num::ParseIntError;
 use std::ops::Add;
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -462,6 +462,7 @@ impl KeySeg for Address {
     Hash,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     Serialize,
     Deserialize,
 )]

@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use std::io::{ErrorKind, Write};
 use std::str::FromStr;
 
-use borsh::{BorshDeserialize, BorshSerialize};
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 pub use ed25519_dalek::SignatureError;
 use ed25519_dalek::{ExpandedSecretKey, Signer, Verifier};
 #[cfg(feature = "rand")]
@@ -48,6 +48,7 @@ pub struct Signature(ed25519_dalek::Signature);
     Clone,
     BorshSerialize,
     BorshDeserialize,
+    BorshSchema,
     PartialEq,
     Eq,
     PartialOrd,
@@ -306,6 +307,24 @@ impl BorshSerialize for PublicKey {
             .try_to_vec()
             .expect("Public key bytes encoding shouldn't fail");
         writer.write_all(&bytes)
+    }
+}
+
+impl BorshSchema for PublicKey {
+    fn add_definitions_recursively(
+        definitions: &mut std::collections::HashMap<
+            borsh::schema::Declaration,
+            borsh::schema::Definition,
+        >,
+    ) {
+        // Encoded as `Vec<u8>`
+        let elements = "u8".into();
+        let definition = borsh::schema::Definition::Sequence { elements };
+        definitions.insert(Self::declaration(), definition);
+    }
+
+    fn declaration() -> borsh::schema::Declaration {
+        "PublicKey".into()
     }
 }
 
