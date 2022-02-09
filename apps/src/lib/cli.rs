@@ -1216,7 +1216,7 @@ pub mod args {
     const OWNER: ArgOpt<WalletAddress> = arg_opt("owner");
     const PUBLIC_KEY: Arg<WalletPublicKey> = arg("public-key");
     const RAW_ADDRESS: Arg<Address> = arg("address");
-    const RAW_PUBLIC_KEY_OPT: ArgOpt<ed25519c::PublicKey> = arg_opt("public-key");
+    const RAW_PUBLIC_KEY_OPT: ArgOpt<common::PublicKey> = arg_opt("public-key");
     const REWARDS_CODE_PATH: ArgOpt<PathBuf> = arg_opt("rewards-code-path");
     const REWARDS_KEY: ArgOpt<WalletPublicKey> = arg_opt("rewards-key");
     const RPC_SOCKET_ADDR: ArgOpt<SocketAddr> = arg_opt("rpc");
@@ -2234,7 +2234,7 @@ pub mod args {
     /// Wallet key lookup arguments
     #[derive(Clone, Debug)]
     pub struct KeyFind {
-        pub public_key: Option<ed25519c::PublicKey>,
+        pub public_key: Option<common::PublicKey>,
         pub alias: Option<String>,
         pub value: Option<String>,
         pub unsafe_show_secret: bool,

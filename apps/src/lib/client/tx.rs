@@ -635,10 +635,10 @@ async fn sign_tx(
     tx: Tx,
     args: &args::Tx,
     default: Option<&WalletAddress>,
-) -> (Context, Tx, std::rc::Rc<ed25519c::SecretKey>) {
+) -> (Context, Tx, std::rc::Rc<common::SecretKey>) {
     let (tx, keypair) = if let Some(signing_key) = &args.signing_key {
         let signing_key = ctx.get_cached(signing_key);
-        (tx.sign::<ed25519c::SigScheme>(&signing_key), signing_key)
+        (tx.sign::<common::SigScheme>(&signing_key), signing_key)
     } else if let Some(signer) = args.signer.as_ref().or(default) {
         let signer = ctx.get(signer);
         let signing_key = signing::find_keypair(
@@ -647,7 +647,7 @@ async fn sign_tx(
             args.ledger_address.clone(),
         )
         .await;
-        (tx.sign::<ed25519c::SigScheme>(&signing_key), signing_key)
+        (tx.sign::<common::SigScheme>(&signing_key), signing_key)
     } else {
         panic!(
             "All transactions must be signed; please either specify the key \
@@ -664,7 +664,7 @@ async fn process_tx(
     ctx: Context,
     args: &args::Tx,
     tx: Tx,
-    keypair: &ed25519c::SecretKey,
+    keypair: &common::SecretKey,
 ) -> (Context, Vec<Address>) {
     // NOTE: use this to print the request JSON body:
 
@@ -796,7 +796,7 @@ pub fn tx_hashes(tx: &WrapperTx) -> (String, String) {
 pub async fn broadcast_tx(
     address: TendermintAddress,
     tx: WrapperTx,
-    keypair: &ed25519c::SecretKey,
+    keypair: &common::SecretKey,
 ) -> Result<Response, Error> {
     // These can later be used to determine when parts of the tx make it
     // on-chain
@@ -848,7 +848,7 @@ pub async fn broadcast_tx(
 pub async fn submit_tx(
     address: TendermintAddress,
     tx: WrapperTx,
-    keypair: &ed25519c::SecretKey,
+    keypair: &common::SecretKey,
 ) -> Result<TxResponse, Error> {
     let mut wrapper_tx_subscription = TendermintWebsocketClient::open(
         WebSocketAddress::try_from(address.clone())?,

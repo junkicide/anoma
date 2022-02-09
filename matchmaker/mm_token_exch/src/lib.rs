@@ -53,8 +53,8 @@ impl AddIntent for TokenExchange {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct ExchangeNode {
     id: Vec<u8>,
-    exchange: key::Signed<ed25519c::SigScheme, Exchange>,
-    intent: key::Signed<ed25519c::SigScheme, FungibleTokenIntent>,
+    exchange: key::Signed<common::SigScheme, Exchange>,
+    intent: key::Signed<common::SigScheme, FungibleTokenIntent>,
 }
 
 impl PartialEq for ExchangeNode {
@@ -67,8 +67,8 @@ impl PartialEq for ExchangeNode {
 fn add_intent_node(
     graph: &mut DiGraph<ExchangeNode, Address>,
     id: Vec<u8>,
-    exchange: key::Signed<ed25519c::SigScheme, Exchange>,
-    intent: key::Signed<ed25519c::SigScheme, FungibleTokenIntent>,
+    exchange: key::Signed<common::SigScheme, Exchange>,
+    intent: key::Signed<common::SigScheme, FungibleTokenIntent>,
 ) {
     let new_node = ExchangeNode {
         id,
@@ -366,6 +366,6 @@ fn create_transfer(
     }
 }
 
-fn decode_intent_data(bytes: &[u8]) -> key::Signed<ed25519c::SigScheme, FungibleTokenIntent> {
-    key::Signed::<ed25519c::SigScheme, FungibleTokenIntent>::try_from_slice(bytes).unwrap()
+fn decode_intent_data(bytes: &[u8]) -> key::Signed<common::SigScheme, FungibleTokenIntent> {
+    key::Signed::<common::SigScheme, FungibleTokenIntent>::try_from_slice(bytes).unwrap()
 }

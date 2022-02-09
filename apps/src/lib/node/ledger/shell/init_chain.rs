@@ -263,12 +263,14 @@ where
         // Set the initial validator set
         for validator in genesis.validators {
             let mut abci_validator = abci::ValidatorUpdate::default();
-            let consensus_key: ed25519c::PublicKey =
+            let consensus_key: common::PublicKey =
                 validator.pos_data.consensus_key.clone();
             let pub_key = TendermintPublicKey {
-                sum: Some(public_key::Sum::Ed25519(
-                    consensus_key.try_to_vec().unwrap(),
-                )),
+                sum: Some(ed25519c::PublicKey::try_from_pk(&consensus_key)
+                          .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap()))
+                          .or_else(|_err| secp256k1::PublicKey::try_from_pk(&consensus_key)
+                          .map(|pk| public_key::Sum::Secp256k1(pk.try_to_vec().unwrap())))
+                    .unwrap())
             };
             abci_validator.pub_key = Some(pub_key);
             let power: u64 =

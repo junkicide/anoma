@@ -5,8 +5,10 @@ use std::hash::{Hash, Hasher};
 use std::io::{ErrorKind, Write};
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use serde::{Deserialize, Serialize, Serializer, Deserializer};
+use serde::de::{Visitor, Error, SeqAccess};
+use serde::ser::SerializeTuple;
+use std::fmt;
 use std::str::FromStr;
 use super::{ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, VerifySigError, IntoRef, SchemeType, SigScheme as SigSchemeTrait};
 #[cfg(feature = "rand")]
@@ -65,7 +67,7 @@ impl Ord for PublicKey {
     }
 }
 
-impl Display for PublicKey {
+impl fmt::Display for PublicKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", hex::encode(&self.0.serialize()))
     }
@@ -122,7 +124,7 @@ impl IntoRef<PublicKey> for SecretKey {
     }
 }
 
-impl Display for SecretKey {
+impl fmt::Display for SecretKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", hex::encode(&self.0.serialize()))
     }
@@ -169,6 +171,50 @@ impl super::Signature for Signature {
         } else {
             Err(ParseSignatureError::MismatchedScheme)
         }
+    }
+}
+
+impl Serialize for Signature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let arr = self.0.serialize();
+        let mut seq = serializer.serialize_tuple(arr.len())?;
+        for elem in &arr[..] {
+            seq.serialize_element(elem)?;
+        }
+        seq.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Signature {
+    fn deserialize<D>(deserializer: D) -> Result<Signature, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct ByteArrayVisitor;
+
+        impl<'de> Visitor<'de> for ByteArrayVisitor {
+            type Value = [u8; 64];
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str(concat!("an array of length ", 64))
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<[u8; 64], A::Error>
+            where A: SeqAccess<'de> {
+                let mut arr = [0; 64];
+                for i in 0..64 {
+                    arr[i] = seq.next_element()?.ok_or_else(|| Error::invalid_length(i, &self))?;
+                }
+                Ok(arr)
+            }
+        }
+        
+        let arr_res = deserializer.deserialize_tuple(64, ByteArrayVisitor)?;
+        let sig = libsecp256k1::Signature::parse_standard(&arr_res).map_err(D::Error::custom)?;
+        Ok(Signature(sig))
     }
 }
 

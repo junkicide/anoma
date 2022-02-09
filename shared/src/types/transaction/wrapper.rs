@@ -167,7 +167,7 @@ pub mod wrapper_tx {
         /// The fee to be payed for including the tx
         pub fee: Fee,
         /// Used to determine an implicit account of the fee payer
-        pub pk: ed25519c::PublicKey,
+        pub pk: common::PublicKey,
         /// The epoch in which the tx is to be submitted. This determines
         /// which decryption key will be used
         pub epoch: Epoch,
@@ -187,7 +187,7 @@ pub mod wrapper_tx {
         /// transaction
         pub fn new(
             fee: Fee,
-            keypair: &ed25519c::SecretKey,
+            keypair: &common::SecretKey,
             epoch: Epoch,
             gas_limit: GasLimit,
             tx: Tx,
@@ -240,7 +240,7 @@ pub mod wrapper_tx {
         }
 
         /// Sign the wrapper transaction and convert to a normal Tx type
-        pub fn sign(&self, keypair: &ed25519c::SecretKey) -> Result<Tx, WrapperTxErr> {
+        pub fn sign(&self, keypair: &common::SecretKey) -> Result<Tx, WrapperTxErr> {
             if self.pk != keypair.into_ref() {
                 return Err(WrapperTxErr::InvalidKeyPair);
             }
@@ -252,7 +252,7 @@ pub mod wrapper_tx {
                         .expect("Could not serialize WrapperTx"),
                 ),
             )
-            .sign::<ed25519c::SigScheme>(keypair))
+            .sign::<common::SigScheme>(keypair))
         }
     }
 
@@ -323,12 +323,12 @@ pub mod wrapper_tx {
         use super::*;
         use crate::types::address::xan;
 
-        fn gen_keypair() -> ed25519c::SecretKey {
+        fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
             use rand::thread_rng;
 
             let mut rng: ThreadRng = thread_rng();
-            ed25519c::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap()
+            common::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap()
         }
 
         /// We test that when we feed in a Tx and then decrypt it again
@@ -421,7 +421,7 @@ pub mod wrapper_tx {
             };
 
             let mut signed_tx_data =
-                SignedTxData::<ed25519c::SigScheme>::try_from_slice(&tx.data.unwrap()[..])
+                SignedTxData::<common::SigScheme>::try_from_slice(&tx.data.unwrap()[..])
                     .expect("Test failed");
 
             // malicious transaction
@@ -451,7 +451,7 @@ pub mod wrapper_tx {
             tx.data = Some(signed_tx_data.try_to_vec().expect("Test failed"));
 
             // check that the signature is not valid
-            tx.verify_sig::<ed25519c::SigScheme>(&keypair.into_ref(), &signed_tx_data.sig)
+            tx.verify_sig::<common::SigScheme>(&keypair.into_ref(), &signed_tx_data.sig)
                 .expect_err("Test failed");
             // check that the try from method also fails
             let err = crate::types::transaction::process_tx(tx)

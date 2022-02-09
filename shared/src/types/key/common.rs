@@ -115,6 +115,8 @@ impl FromStr for SecretKey {
     PartialEq,
     PartialOrd,
     Hash,
+    Serialize,
+    Deserialize,
     BorshSerialize,
     BorshDeserialize,
 )]

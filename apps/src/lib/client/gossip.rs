@@ -29,7 +29,7 @@ pub async fn gossip_intent(
         to_stdout,
     }: args::Intent,
 ) {
-    let mut signed_exchanges: HashSet<Signed<ed25519c::SigScheme, Exchange>> =
+    let mut signed_exchanges: HashSet<Signed<common::SigScheme, Exchange>> =
         HashSet::with_capacity(exchanges.len());
     for exchange in exchanges {
         let signed =
@@ -53,7 +53,7 @@ pub async fn gossip_intent(
             .await
         }
     };
-    let signed_ft: Signed<ed25519c::SigScheme, FungibleTokenIntent> = Signed::new(
+    let signed_ft: Signed<common::SigScheme, FungibleTokenIntent> = Signed::new(
         &*source_keypair,
         FungibleTokenIntent {
             exchange: signed_exchanges,
@@ -112,7 +112,7 @@ async fn sign_exchange(
     wallet: &mut Wallet,
     exchange: Exchange,
     ledger_address: TendermintAddress,
-) -> Signed<ed25519c::SigScheme, Exchange> {
+) -> Signed<common::SigScheme, Exchange> {
     let source_keypair =
         signing::find_keypair(wallet, &exchange.addr, ledger_address).await;
     Signed::new(&*source_keypair, exchange.clone())

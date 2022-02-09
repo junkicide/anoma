@@ -9,7 +9,7 @@ pub mod vp {
 
     /// Get the public key associated with the given address. Panics if not
     /// found.
-    pub fn get(owner: &Address) -> Option<ed25519c::PublicKey> {
+    pub fn get(owner: &Address) -> Option<common::PublicKey> {
         let key = pk_key(owner).to_string();
         vp::read_pre(&key)
     }

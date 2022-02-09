@@ -1472,7 +1472,7 @@ where
         .map_err(|e| vp_env::RuntimeError::MemoryError(Box::new(e)))?;
     let gas_meter = unsafe { env.ctx.gas_meter.get() };
     vp_env::add_gas(gas_meter, gas)?;
-    let pk: ed25519c::PublicKey = BorshDeserialize::try_from_slice(&pk)
+    let pk: common::PublicKey = BorshDeserialize::try_from_slice(&pk)
         .map_err(vp_env::RuntimeError::EncodingError)?;
 
     let (sig, gas) = env
@@ -1480,12 +1480,12 @@ where
         .read_bytes(sig_ptr, sig_len as _)
         .map_err(|e| vp_env::RuntimeError::MemoryError(Box::new(e)))?;
     vp_env::add_gas(gas_meter, gas)?;
-    let sig: ed25519c::Signature = BorshDeserialize::try_from_slice(&sig)
+    let sig: common::Signature = BorshDeserialize::try_from_slice(&sig)
         .map_err(vp_env::RuntimeError::EncodingError)?;
 
     vp_env::add_gas(gas_meter, VERIFY_TX_SIG_GAS_COST)?;
     let tx = unsafe { env.ctx.tx.get() };
-    Ok(HostEnvResult::from(tx.verify_sig::<ed25519c::SigScheme>(&pk, &sig).is_ok()).to_i64())
+    Ok(HostEnvResult::from(tx.verify_sig::<common::SigScheme>(&pk, &sig).is_ok()).to_i64())
 }
 
 /// Log a string from exposed to the wasm VM Tx environment. The message will be

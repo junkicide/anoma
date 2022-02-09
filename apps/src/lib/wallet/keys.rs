@@ -23,7 +23,7 @@ pub enum StoredKeypair {
     /// An raw (unencrypted) keypair
     Raw(
         // Wrapped in `Rc` to avoid reference lifetimes when we borrow the key
-        Rc<ed25519c::SecretKey>,
+        Rc<common::SecretKey>,
     ),
 }
 
@@ -137,9 +137,9 @@ impl StoredKeypair {
     /// will be stored raw without encryption. Returns the key for storing and a
     /// reference-counting point to the raw key.
     pub fn new(
-        keypair: ed25519c::SecretKey,
+        keypair: common::SecretKey,
         password: Option<String>,
-    ) -> (Self, Rc<ed25519c::SecretKey>) {
+    ) -> (Self, Rc<common::SecretKey>) {
         match password {
             Some(password) => {
                 let keypair = Rc::new(keypair);
@@ -157,7 +157,7 @@ impl StoredKeypair {
 
     /// Get a raw keypair from a stored keypair. If the keypair is encrypted, a
     /// password will be prompted from stdin.
-    pub fn get(&self, decrypt: bool) -> Result<Rc<ed25519c::SecretKey>, DecryptionError> {
+    pub fn get(&self, decrypt: bool) -> Result<Rc<common::SecretKey>, DecryptionError> {
         match self {
             StoredKeypair::Encrypted(encrypted_keypair) => {
                 if decrypt {
@@ -182,7 +182,7 @@ impl StoredKeypair {
 
 impl EncryptedKeypair {
     /// Encrypt a keypair and store it with its salt.
-    pub fn new(keypair: &ed25519c::SecretKey, password: String) -> Self {
+    pub fn new(keypair: &common::SecretKey, password: String) -> Self {
         let salt = encryption_salt();
         let encryption_key = encryption_key(&salt, password);
 
@@ -202,7 +202,7 @@ impl EncryptedKeypair {
     pub fn decrypt(
         &self,
         password: String,
-    ) -> Result<ed25519c::SecretKey, DecryptionError> {
+    ) -> Result<common::SecretKey, DecryptionError> {
         let salt_len = encryption_salt().len();
         let (raw_salt, cipher) = self.0.split_at(salt_len);
 
@@ -214,7 +214,7 @@ impl EncryptedKeypair {
         let decrypted_data = aead::open(&encryption_key, cipher)
             .map_err(|_| DecryptionError::DecryptionError)?;
 
-        ed25519c::SecretKey::try_from_slice(&decrypted_data)
+        common::SecretKey::try_from_slice(&decrypted_data)
             .map_err(|_| DecryptionError::DeserializingError)
     }
 }

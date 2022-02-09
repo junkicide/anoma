@@ -303,11 +303,13 @@ where
                     (consensus_key, power)
                 }
             };
-            let consensus_key: ed25519c::PublicKey = consensus_key.into();
+            let consensus_key: common::PublicKey = consensus_key.into();
             let pub_key = TendermintPublicKey {
-                sum: Some(public_key::Sum::Ed25519(
-                    consensus_key.try_to_vec().unwrap(),
-                )),
+                sum: Some(ed25519c::PublicKey::try_from_pk(&consensus_key)
+                          .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap()))
+                          .or_else(|_err| secp256k1::PublicKey::try_from_pk(&consensus_key)
+                          .map(|pk| public_key::Sum::Secp256k1(pk.try_to_vec().unwrap())))
+                          .unwrap()),
             };
             let pub_key = Some(pub_key);
             let update = ValidatorUpdate { pub_key, power };

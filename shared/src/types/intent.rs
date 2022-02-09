@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::types::address::Address;
-use crate::types::key::{Signed, ed25519c};
+use crate::types::key::{Signed, common};
 use crate::types::storage::{DbKeySeg, Key, KeySeg};
 use crate::types::token;
 
@@ -28,7 +28,7 @@ use crate::types::token;
 )]
 pub struct FungibleTokenIntent {
     /// List of exchange definitions
-    pub exchange: HashSet<Signed<ed25519c::SigScheme, Exchange>>,
+    pub exchange: HashSet<Signed<common::SigScheme, Exchange>>,
 }
 
 #[derive(
@@ -79,12 +79,12 @@ pub struct MatchedExchanges {
     pub transfers: HashSet<token::Transfer>,
     // TODO benchmark between an map or a set, see which is less costly
     /// The exchanges that were matched
-    pub exchanges: HashMap<Address, Signed<ed25519c::SigScheme, Exchange>>,
+    pub exchanges: HashMap<Address, Signed<common::SigScheme, Exchange>>,
     /// The intents
     // TODO: refactor this without duplicating stuff. The exchanges in the
     // `exchanges` hashmap are already contained in the FungibleTokenIntents
     // belows
-    pub intents: HashMap<Address, Signed<ed25519c::SigScheme, FungibleTokenIntent>>,
+    pub intents: HashMap<Address, Signed<common::SigScheme, FungibleTokenIntent>>,
 }
 
 /// These are transfers crafted from matched [`Exchange`]s with a source address

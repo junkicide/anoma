@@ -97,7 +97,7 @@ impl TestTxEnv {
     pub fn write_public_key(
         &mut self,
         address: &Address,
-        public_key: &key::ed25519c::PublicKey,
+        public_key: &key::common::PublicKey,
     ) {
         let storage_key = key::pk_key(address);
         self.storage

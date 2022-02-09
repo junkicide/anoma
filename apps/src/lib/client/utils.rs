@@ -148,8 +148,8 @@ pub async fn join_network(
 const TENDERMINT_NODE_ID_LENGTH: usize = 20;
 
 /// Derive node ID from public key
-fn id_from_pk(pk: ed25519_consensus::VerificationKey) -> TendermintNodeId {
-    let digest = Sha256::digest(pk.as_bytes());
+fn id_from_pk<PK: PublicKey>(pk: PK) -> TendermintNodeId {
+    let digest = Sha256::digest(pk.try_to_vec().unwrap().as_slice());
     let mut bytes = [0u8; TENDERMINT_NODE_ID_LENGTH];
     bytes.copy_from_slice(&digest[..TENDERMINT_NODE_ID_LENGTH]);
     TendermintNodeId::new(bytes)
@@ -223,9 +223,8 @@ pub fn init_network(
         let validator_dir = accounts_dir.join(name);
 
         // Generate a node key
-        let node_seckey = ed25519c::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap();
-        let node_pk: ed25519_consensus::VerificationKey =
-            node_seckey.into_ref().clone().0;
+        let node_seckey = common::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap();
+        let node_pk: common::PublicKey = node_seckey.into_ref();
 
         // Derive the node ID from the node key
         let node_id: TendermintNodeId = id_from_pk(node_pk);

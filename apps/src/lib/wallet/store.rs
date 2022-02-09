@@ -163,13 +163,13 @@ impl Store {
             })
             // Try to find by PK
             .or_else(|| {
-                let pk = ed25519c::PublicKey::from_str(alias_pkh_or_pk).ok()?;
+                let pk = common::PublicKey::from_str(alias_pkh_or_pk).ok()?;
                 self.find_key_by_pk(&pk)
             })
     }
 
     /// Find the stored key by a public key.
-    pub fn find_key_by_pk(&self, pk: &ed25519c::PublicKey) -> Option<&StoredKeypair> {
+    pub fn find_key_by_pk(&self, pk: &common::PublicKey) -> Option<&StoredKeypair> {
         let pkh = PublicKeyHash::from(pk);
         self.find_key_by_pkh(&pkh)
     }
@@ -218,10 +218,10 @@ impl Store {
         &self.addresses
     }
 
-    fn generate_keypair() -> ed25519c::SecretKey {
+    fn generate_keypair() -> common::SecretKey {
         use rand::rngs::OsRng;
         let mut csprng = OsRng {};
-        ed25519c::SigScheme::generate(&mut csprng, ed25519c::SigScheme::TYPE).unwrap()
+        common::SigScheme::generate(&mut csprng, ed25519c::SigScheme::TYPE).unwrap()
     }
 
     /// Generate a new keypair and insert it into the store with the provided
@@ -233,7 +233,7 @@ impl Store {
         &mut self,
         alias: Option<String>,
         password: Option<String>,
-    ) -> (String, Rc<ed25519c::SecretKey>) {
+    ) -> (String, Rc<common::SecretKey>) {
         let keypair = Self::generate_keypair();
         let pkh: PublicKeyHash = PublicKeyHash::from(&keypair.into_ref());
         let (keypair_to_store, raw_keypair) =

@@ -57,7 +57,7 @@ pub fn get_gossiper_mm_server(test: &Test, who: &Who) -> String {
 
 /// Find the address of an account by its alias from the wallet
 #[allow(dead_code)]
-pub fn find_keypair(test: &Test, alias: impl AsRef<str>) -> Result<ed25519c::SecretKey> {
+pub fn find_keypair(test: &Test, alias: impl AsRef<str>) -> Result<common::SecretKey> {
     let mut find = run!(
         test,
         Bin::Wallet,
@@ -75,7 +75,7 @@ pub fn find_keypair(test: &Test, alias: impl AsRef<str>) -> Result<ed25519c::Sec
     let (unread, matched) = find.exp_regex("Secret key: .*\n")?;
     let sk = matched.trim().rsplit_once(" ").unwrap().1;
     let key = format!("{}{}", sk, pk);
-    ed25519c::SecretKey::from_str(&key).map_err(|e| {
+    common::SecretKey::from_str(&key).map_err(|e| {
         eyre!(format!(
             "Key: {} parsed from {}, Error: {}\n\nOutput: {}",
             key, matched, e, unread

@@ -713,7 +713,7 @@ pub async fn dry_run_tx(ledger_address: &TendermintAddress, tx_bytes: Vec<u8>) {
 pub async fn get_public_key(
     address: &Address,
     ledger_address: TendermintAddress,
-) -> Option<ed25519c::PublicKey> {
+) -> Option<common::PublicKey> {
     let client = HttpClient::new(ledger_address).unwrap();
     let key = pk_key(address);
     query_storage_value(client, key).await

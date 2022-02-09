@@ -122,6 +122,7 @@ pub enum SchemeType {
 
 pub trait Signature : Hash
     + PartialOrd
+    + Serialize
     + BorshSerialize
     + BorshDeserialize {
         /// The scheme type of this implementation
@@ -129,10 +130,16 @@ pub trait Signature : Hash
         /// Convert from one Signature type to another
         fn try_from_sig<PK: Signature>(pk: &PK) -> Result<Self, ParseSignatureError> {
             if PK::TYPE == Self::TYPE {
-                Self::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParseSignatureError::InvalidEncoding)
+                let sig_arr = pk.try_to_vec().unwrap();
+                let res = Self::try_from_slice(sig_arr.as_ref());
+                res.map_err(ParseSignatureError::InvalidEncoding)
             } else {
                 Err(ParseSignatureError::MismatchedScheme)
             }
+        }
+        /// Convert from self to another SecretKey type
+        fn try_into_sig<PK: Signature>(&self) -> Result<PK, ParseSignatureError> {
+            PK::try_from_sig(self)
         }
     }
 
@@ -154,10 +161,16 @@ pub trait PublicKey : BorshSerialize
         /// Convert from one PublicKey type to another
         fn try_from_pk<PK: PublicKey>(pk: &PK) -> Result<Self, ParsePublicKeyError> {
             if Self::TYPE == PK::TYPE {
-                Self::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParsePublicKeyError::InvalidEncoding)
+                let pk_arr = pk.try_to_vec().unwrap();
+                let res = Self::try_from_slice(pk_arr.as_ref());
+                res.map_err(ParsePublicKeyError::InvalidEncoding)
             } else {
                 Err(ParsePublicKeyError::MismatchedScheme)
             }
+        }
+        /// Convert from self to another SecretKey type
+        fn try_into_pk<PK: PublicKey>(&self) -> Result<PK, ParsePublicKeyError> {
+            PK::try_from_pk(self)
         }
     }
 
@@ -176,13 +189,19 @@ pub trait SecretKey : BorshSerialize
         const TYPE: SchemeType;
         /// Represents the public part of this keypair
         type PublicKey: PublicKey;
-        /// Convert from one SecretKey type to another
+        /// Convert from one SecretKey type to self
         fn try_from_sk<PK: SecretKey>(pk: &PK) -> Result<Self, ParseSecretKeyError> {
             if PK::TYPE == Self::TYPE {
-                Self::try_from_slice(pk.try_to_vec().unwrap().as_ref()).map_err(ParseSecretKeyError::InvalidEncoding)
+                let sk_vec = pk.try_to_vec().unwrap();
+                let res = Self::try_from_slice(sk_vec.as_ref());
+                res.map_err(ParseSecretKeyError::InvalidEncoding)
             } else {
                 Err(ParseSecretKeyError::MismatchedScheme)
             }
+        }
+        /// Convert from self to another SecretKey type
+        fn try_into_sk<PK: SecretKey>(&self) -> Result<PK, ParseSecretKeyError> {
+            PK::try_from_sk(self)
         }
     }
 
@@ -383,29 +402,29 @@ pub mod testing {
     use borsh::BorshDeserialize;
     use rand::prelude::{StdRng, ThreadRng};
     use rand::{thread_rng, SeedableRng};
-    use crate::types::key::ed25519c;
+    use crate::types::key::*;
     use super::{SigScheme, SchemeType};
 
     /// A keypair for tests
-    pub fn keypair_1() -> <ed25519c::SigScheme as SigScheme>::SecretKey {
+    pub fn keypair_1() -> <common::SigScheme as SigScheme>::SecretKey {
         // generated from `cargo test gen_keypair -- --nocapture`
         let bytes = [
             33, 82, 91, 186, 100, 168, 220, 158, 185, 140, 63, 172, 3, 88, 52,
             113, 94, 30, 213, 84, 175, 184, 235, 169, 70, 175, 36, 252, 45,
             190, 138, 79,
         ];
-        <ed25519c::SigScheme as SigScheme>::SecretKey::try_from_slice(bytes.as_ref()).unwrap().into()
+        ed25519c::SecretKey::try_from_slice(bytes.as_ref()).unwrap().try_into_sk().unwrap()
     }
 
     /// A keypair for tests
-    pub fn keypair_2() -> <ed25519c::SigScheme as SigScheme>::SecretKey {
+    pub fn keypair_2() -> <common::SigScheme as SigScheme>::SecretKey {
         // generated from `cargo test gen_keypair -- --nocapture`
         let bytes = [
             27, 238, 157, 32, 131, 242, 184, 142, 146, 189, 24, 249, 68, 165,
             205, 71, 213, 158, 25, 253, 52, 217, 87, 52, 171, 225, 110, 131,
             238, 58, 94, 56,
         ];
-        <ed25519c::SigScheme as SigScheme>::SecretKey::try_from_slice(bytes.as_ref()).unwrap().into()
+        ed25519c::SecretKey::try_from_slice(bytes.as_ref()).unwrap().try_into_sk().unwrap()
     }
 
     /// Generate an arbitrary [`Keypair`].

@@ -369,14 +369,14 @@ pub enum ImplicitAddress {
     Ed25519(key::PublicKeyHash),
 }
 
-impl From<&key::ed25519c::PublicKey> for ImplicitAddress {
-    fn from(pk: &key::ed25519c::PublicKey) -> Self {
+impl From<&key::common::PublicKey> for ImplicitAddress {
+    fn from(pk: &key::common::PublicKey) -> Self {
         ImplicitAddress::Ed25519(pk.into())
     }
 }
 
-impl From<&key::ed25519c::PublicKey> for Address {
-    fn from(pk: &key::ed25519c::PublicKey) -> Self {
+impl From<&key::common::PublicKey> for Address {
+    fn from(pk: &key::common::PublicKey) -> Self {
         Self::Implicit(pk.into())
     }
 }
@@ -588,7 +588,7 @@ pub mod testing {
 
     /// Generate a new implicit address.
     pub fn gen_implicit_address() -> Address {
-        let keypair = key::testing::gen_keypair::<ed25519c::SigScheme>(<ed25519c::SigScheme as key::SigScheme>::TYPE);
+        let keypair = key::testing::gen_keypair::<common::SigScheme>(<ed25519c::SigScheme as key::SigScheme>::TYPE);
         let pkh = PublicKeyHash::from(&keypair.into_ref());
         Address::Implicit(ImplicitAddress::Ed25519(pkh))
     }
@@ -649,7 +649,7 @@ pub mod testing {
 
     /// Generate an arbitrary [`ImplicitAddress`].
     pub fn arb_implicit_address() -> impl Strategy<Value = ImplicitAddress> {
-        key::testing::arb_keypair::<ed25519c::SigScheme>(ed25519c::SigScheme::TYPE).prop_map(|keypair| {
+        key::testing::arb_keypair::<common::SigScheme>(ed25519c::SigScheme::TYPE).prop_map(|keypair| {
             let pkh = PublicKeyHash::from(&keypair.into_ref());
             ImplicitAddress::Ed25519(pkh)
         })

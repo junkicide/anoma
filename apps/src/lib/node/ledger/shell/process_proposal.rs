@@ -313,7 +313,7 @@ mod test_process_proposal {
         )
         .sign(&keypair)
         .expect("Test failed");
-        let new_tx = if let Some(Ok(SignedTxData::<ed25519c::SigScheme> {
+        let new_tx = if let Some(Ok(SignedTxData::<common::SigScheme> {
             data: Some(data),
             sig,
         })) = wrapper
@@ -338,7 +338,7 @@ mod test_process_proposal {
             Tx {
                 code: vec![],
                 data: Some(
-                    SignedTxData::<ed25519c::SigScheme> {
+                    SignedTxData::<common::SigScheme> {
                         sig,
                         data: Some(new_data),
                     }
@@ -354,7 +354,7 @@ mod test_process_proposal {
             tx: new_tx.to_bytes(),
         };
         let response = shell.process_proposal(request);
-        let expected_error = "Signature verification failed: signature error";
+        let expected_error = "Signature verification failed: Invalid signature";
         assert_eq!(response.result.code, u32::from(ErrorCodes::InvalidSig));
         assert!(
             response.result.info.contains(expected_error),

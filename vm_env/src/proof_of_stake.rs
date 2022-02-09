@@ -93,7 +93,7 @@ pub struct PoS;
 
 impl anoma_proof_of_stake::PosReadOnly for PoS {
     type Address = Address;
-    type PublicKey = key::ed25519c::PublicKey;
+    type PublicKey = key::common::PublicKey;
     type TokenAmount = token::Amount;
     type TokenChange = token::Change;
 

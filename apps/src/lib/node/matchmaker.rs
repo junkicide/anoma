@@ -40,7 +40,7 @@ pub async fn run(
     }: config::Matchmaker,
     intent_gossiper_addr: SocketAddr,
     ledger_addr: TendermintAddress,
-    tx_signing_key: Rc<ed25519c::SecretKey>,
+    tx_signing_key: Rc<common::SecretKey>,
     tx_source_address: Address,
     wasm_dir: impl AsRef<Path>,
 ) {
@@ -103,7 +103,7 @@ pub struct ResultHandler {
     /// A source address for transactions created from intents.
     tx_source_address: Address,
     /// A keypair that will be used to sign transactions.
-    tx_signing_key: Rc<ed25519c::SecretKey>,
+    tx_signing_key: Rc<common::SecretKey>,
 }
 
 /// The loaded implementation's dylib and its state
@@ -131,7 +131,7 @@ impl Runner {
         matchmaker_path: PathBuf,
         tx_code_path: PathBuf,
         ledger_address: TendermintAddress,
-        tx_signing_key: Rc<ed25519c::SecretKey>,
+        tx_signing_key: Rc<common::SecretKey>,
         tx_source_address: Address,
         wasm_dir: impl AsRef<Path>,
     ) -> (Self, ResultHandler) {
@@ -324,7 +324,7 @@ impl ResultHandler {
             })
             .await,
             0.into(),
-            Tx::new(tx_code, Some(tx_data)).sign::<ed25519c::SigScheme>(&self.tx_signing_key),
+            Tx::new(tx_code, Some(tx_data)).sign::<common::SigScheme>(&self.tx_signing_key),
         );
 
         let response =

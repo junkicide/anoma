@@ -20,7 +20,7 @@ pub async fn find_keypair(
     wallet: &mut Wallet,
     addr: &Address,
     ledger_address: TendermintAddress,
-) -> Rc<ed25519c::SecretKey> {
+) -> Rc<common::SecretKey> {
     match addr {
         Address::Established(_) => {
             println!(

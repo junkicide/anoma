@@ -414,13 +414,13 @@ mod tests {
             // Tx without any data
             None,
         ] {
-            env.tx = Tx::new(code.clone(), data.clone()).sign::<ed25519c::SigScheme>(&keypair);
+            env.tx = Tx::new(code.clone(), data.clone()).sign::<common::SigScheme>(&keypair);
             // Initialize the environment
             init_vp_env(&mut env);
 
             let tx_data = env.tx.data.expect("data should exist");
             let signed_tx_data =
-                match SignedTxData::<ed25519c::SigScheme>::try_from_slice(&tx_data[..]) {
+                match SignedTxData::<common::SigScheme>::try_from_slice(&tx_data[..]) {
                     Ok(data) => data,
                     _ => panic!("decoding failed"),
                 };

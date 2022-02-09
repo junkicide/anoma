@@ -91,7 +91,7 @@ pub struct InitAccount {
     /// Public key to be written into the account's storage. This can be used
     /// for signature verification of transactions for the newly created
     /// account.
-    pub public_key: ed25519c::PublicKey,
+    pub public_key: common::PublicKey,
     /// The VP code
     pub vp_code: Vec<u8>,
 }
@@ -111,13 +111,13 @@ pub struct InitValidator {
     /// Public key to be written into the account's storage. This can be used
     /// for signature verification of transactions for the newly created
     /// account.
-    pub account_key: ed25519c::PublicKey,
+    pub account_key: common::PublicKey,
     /// A key to be used for signing blocks and votes on blocks.
-    pub consensus_key: ed25519c::PublicKey,
+    pub consensus_key: common::PublicKey,
     /// Public key to be written into the staking reward account's storage.
     /// This can be used for signature verification of transactions for the
     /// newly created account.
-    pub rewards_account_key: ed25519c::PublicKey,
+    pub rewards_account_key: common::PublicKey,
     /// The VP code for validator account
     pub validator_vp_code: Vec<u8>,
     /// The VP code for validator's staking reward account
@@ -198,7 +198,7 @@ pub mod tx_types {
         })) = tx
             .data
             .as_ref()
-            .map(|data| SignedTxData::<ed25519c::SigScheme>::try_from_slice(&data[..]))
+            .map(|data| SignedTxData::<common::SigScheme>::try_from_slice(&data[..]))
         {
             match TxType::try_from(Tx {
                 code: vec![],
@@ -209,7 +209,7 @@ pub mod tx_types {
             {
                 // verify signature and extract signed data
                 TxType::Wrapper(wrapper) => {
-                    tx.verify_sig::<ed25519c::SigScheme>(&wrapper.pk, sig)
+                    tx.verify_sig::<common::SigScheme>(&wrapper.pk, sig)
                         .map_err(WrapperTxErr::SigError)?;
                     Ok(TxType::Wrapper(wrapper))
                 }
@@ -236,12 +236,12 @@ pub mod tx_types {
         use crate::types::address::xan;
         use crate::types::storage::Epoch;
 
-        fn gen_keypair() -> ed25519c::SecretKey {
+        fn gen_keypair() -> common::SecretKey {
             use rand::prelude::ThreadRng;
             use rand::thread_rng;
 
             let mut rng: ThreadRng = thread_rng();
-            ed25519c::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap()
+            common::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap()
         }
 
         /// Test that process_tx correctly identifies a raw tx with no
@@ -296,7 +296,7 @@ pub mod tx_types {
                         .expect("Test failed"),
                 ),
             )
-            .sign::<ed25519c::SigScheme>(&gen_keypair());
+            .sign::<common::SigScheme>(&gen_keypair());
 
             match process_tx(tx).expect("Test failed") {
                 TxType::Raw(raw) => assert_eq!(inner, raw),
@@ -399,13 +399,14 @@ pub mod tx_types {
         );
         let decrypted = DecryptedTx::Decrypted(payload.clone());
         // Invalid signed data
-        let signed = SignedTxData::<ed25519c::SigScheme> {
+        let ed_sig = ed25519c::Signature::try_from_slice([0u8; 64].as_ref()).unwrap();
+        let signed = SignedTxData::<common::SigScheme> {
             data: Some(
                 TxType::Decrypted(decrypted)
                     .try_to_vec()
                     .expect("Test failed"),
             ),
-            sig: ed25519c::Signature::try_from_slice([0u8; 64].as_ref()).unwrap(),
+            sig: common::Signature::try_from_sig(&ed_sig).unwrap(),
         };
         // create the tx with signed decrypted data
         let tx =

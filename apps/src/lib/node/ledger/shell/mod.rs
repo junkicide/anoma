@@ -512,12 +512,12 @@ mod test_utils {
     }
 
     /// Generate a random public/private keypair
-    pub(super) fn gen_keypair() -> ed25519c::SecretKey {
+    pub(super) fn gen_keypair() -> common::SecretKey {
         use rand::prelude::ThreadRng;
         use rand::thread_rng;
 
         let mut rng: ThreadRng = thread_rng();
-        ed25519c::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap()
+        common::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap()
     }
 
     /// A wrapper around the shell that implements

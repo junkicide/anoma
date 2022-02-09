@@ -219,7 +219,7 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
 pub async fn write_validator_key_async(
     home_dir: impl AsRef<Path>,
     address: &Address,
-    consensus_key: &ed25519c::SecretKey,
+    consensus_key: &common::SecretKey,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("priv_validator_key.json");
@@ -235,23 +235,40 @@ pub async fn write_validator_key_async(
         .open(&path)
         .await
         .expect("Couldn't create private validator key file");
-    let pk: ed25519c::PublicKey = consensus_key.into_ref();
-    let pk = base64::encode(pk.try_to_vec().unwrap().as_slice());
-    let ck_arr =
-        [consensus_key.try_to_vec().unwrap(),
-         consensus_key.into_ref().try_to_vec().unwrap()].concat();
     let address = address.raw_hash().unwrap();
-    let key = json!({
-       "address": address,
-       "pub_key": {
-         "type": "tendermint/PubKeyEd25519",
-         "value": pk,
-       },
-       "priv_key": {
-         "type": "tendermint/PrivKeyEd25519",
-         "value": base64::encode(ck_arr),
-      }
-    });
+    let key = ed25519c::SecretKey::try_from_sk(consensus_key).map(|sk| {
+        let pk: ed25519c::PublicKey = sk.into_ref();
+        let ck_arr =
+            [sk.try_to_vec().unwrap(),
+             pk.try_to_vec().unwrap()].concat();
+        json!({
+            "address": address,
+            "pub_key": {
+                "type": "tendermint/PubKeyEd25519",
+                "value": base64::encode(pk.try_to_vec().unwrap()),
+            },
+            "priv_key": {
+                "type": "tendermint/PrivKeyEd25519",
+                "value": base64::encode(ck_arr),
+            }
+        })
+    }).or_else(|_err| { secp256k1::SecretKey::try_from_sk(consensus_key).map(|sk| {
+        let pk: secp256k1::PublicKey = sk.into_ref();
+        let ck_arr =
+            [sk.try_to_vec().unwrap(),
+             pk.try_to_vec().unwrap()].concat();
+        json!({
+            "address": address,
+            "pub_key": {
+                "type": "tendermint/PubKeySecp256k1",
+                "value": base64::encode(pk.try_to_vec().unwrap()),
+            },
+            "priv_key": {
+                "type": "tendermint/PrivKeySecp256k1",
+                "value": base64::encode(ck_arr),
+            }
+        })
+    })}).unwrap();
     let data = serde_json::to_vec_pretty(&key)
         .expect("Couldn't encode private validator key file");
     file.write_all(&data[..])
@@ -263,7 +280,7 @@ pub async fn write_validator_key_async(
 pub fn write_validator_key(
     home_dir: impl AsRef<Path>,
     address: &Address,
-    consensus_key: &ed25519c::SecretKey,
+    consensus_key: &common::SecretKey,
 ) {
     let home_dir = home_dir.as_ref();
     let path = home_dir.join("config").join("priv_validator_key.json");
@@ -277,23 +294,40 @@ pub fn write_validator_key(
         .truncate(true)
         .open(&path)
         .expect("Couldn't create private validator key file");
-    let pk: ed25519c::PublicKey = consensus_key.into_ref();
-    let pk = base64::encode(pk.try_to_vec().unwrap());
-    let ck_arr =
-        [consensus_key.try_to_vec().unwrap(),
-         consensus_key.into_ref().try_to_vec().unwrap()].concat();
     let address = address.raw_hash().unwrap();
-    let key = json!({
-       "address": address,
-       "pub_key": {
-         "type": "tendermint/PubKeyEd25519",
-         "value": pk,
-       },
-       "priv_key": {
-         "type": "tendermint/PrivKeyEd25519",
-         "value": base64::encode(ck_arr),
-      }
-    });
+    let key = ed25519c::SecretKey::try_from_sk(consensus_key).map(|sk| {
+        let pk: ed25519c::PublicKey = sk.into_ref();
+        let ck_arr =
+            [sk.try_to_vec().unwrap(),
+             pk.try_to_vec().unwrap()].concat();
+        json!({
+            "address": address,
+            "pub_key": {
+                "type": "tendermint/PubKeyEd25519",
+                "value": base64::encode(pk.try_to_vec().unwrap()),
+            },
+            "priv_key": {
+                "type": "tendermint/PrivKeyEd25519",
+                "value": base64::encode(ck_arr),
+            }
+        })
+    }).or_else(|_err| { secp256k1::SecretKey::try_from_sk(consensus_key).map(|sk| {
+        let pk: secp256k1::PublicKey = sk.into_ref();
+        let ck_arr =
+            [sk.try_to_vec().unwrap(),
+             pk.try_to_vec().unwrap()].concat();
+        json!({
+            "address": address,
+            "pub_key": {
+                "type": "tendermint/PubKeySecp256k1",
+                "value": base64::encode(pk.try_to_vec().unwrap()),
+            },
+            "priv_key": {
+                "type": "tendermint/PrivKeySecp256k1",
+                "value": base64::encode(ck_arr),
+            }
+        })
+    })}).unwrap();
     serde_json::to_writer_pretty(file, &key)
         .expect("Couldn't write private validator key file");
 }

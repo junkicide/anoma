@@ -53,7 +53,7 @@ pub fn addresses_from_genesis(genesis: GenesisConfig) -> Vec<(Alias, Address)> {
             accounts.into_iter().filter_map(|(alias, implicit)| {
                 // The public key may not be revealed, only add it if it is
                 implicit.public_key.map(|pk| {
-                    let pk: ed25519c::PublicKey = pk.to_public_key().unwrap();
+                    let pk: common::PublicKey = pk.to_public_key().unwrap();
                     let addr: Address = (&pk).into();
                     (alias, addr)
                 })
@@ -73,7 +73,7 @@ mod dev {
     use crate::wallet::store::Alias;
 
     /// The default keys with their aliases.
-    pub fn keys() -> Vec<(Alias, ed25519c::SecretKey)> {
+    pub fn keys() -> Vec<(Alias, common::SecretKey)> {
         vec![
             ("Albert".into(), albert_keypair()),
             ("Bertha".into(), bertha_keypair()),
@@ -134,7 +134,7 @@ mod dev {
         Address::decode("atest1v4ehgw36x5mnswphx565gv2yxdprzvf5gdp523jpxy6rvv6zxaznzsejxeznzseh8pp5ywz93xwala").expect("The address decoding shouldn't fail")
     }
 
-    pub fn albert_keypair() -> ed25519c::SecretKey {
+    pub fn albert_keypair() -> common::SecretKey {
         // generated from
         // [`anoma::types::key::ed25519::gen_keypair`]
         let bytes = [
@@ -142,10 +142,11 @@ mod dev {
             196, 252, 190, 245, 222, 96, 209, 34, 36, 40, 214, 169, 156, 235,
             78, 188, 33,
         ];
-        ed25519c::SecretKey::try_from_slice(&bytes).unwrap()
+        let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
+        ed_sk.try_into_sk().unwrap()
     }
 
-    pub fn bertha_keypair() -> ed25519c::SecretKey {
+    pub fn bertha_keypair() -> common::SecretKey {
         // generated from
         // [`anoma::types::key::ed25519::gen_keypair`]
         let bytes = [
@@ -153,10 +154,11 @@ mod dev {
             6, 176, 162, 113, 224, 62, 8, 183, 187, 124, 234, 244, 251, 92, 36,
             119, 243,
         ];
-        ed25519c::SecretKey::try_from_slice(&bytes).unwrap()
+        let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
+        ed_sk.try_into_sk().unwrap()
     }
 
-    pub fn christel_keypair() -> ed25519c::SecretKey {
+    pub fn christel_keypair() -> common::SecretKey {
         // generated from
         // [`anoma::types::key::ed25519::gen_keypair`]
         let bytes = [
@@ -164,10 +166,11 @@ mod dev {
             71, 190, 234, 137, 176, 188, 181, 174, 183, 49, 131, 230, 46, 39,
             70, 20, 130, 253,
         ];
-        ed25519c::SecretKey::try_from_slice(&bytes).unwrap()
+        let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
+        ed_sk.try_into_sk().unwrap()
     }
 
-    pub fn daewon_keypair() -> ed25519c::SecretKey {
+    pub fn daewon_keypair() -> common::SecretKey {
         // generated from
         // [`anoma::types::key::ed25519::gen_keypair`]
         let bytes = [
@@ -175,10 +178,11 @@ mod dev {
             57, 187, 156, 182, 144, 107, 174, 38, 81, 37, 40, 19, 142, 68, 135,
             57, 50,
         ];
-        ed25519c::SecretKey::try_from_slice(&bytes).unwrap()
+        let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
+        ed_sk.try_into_sk().unwrap()
     }
 
-    pub fn validator_keypair() -> ed25519c::SecretKey {
+    pub fn validator_keypair() -> common::SecretKey {
         // generated from
         // [`anoma::types::key::ed25519::gen_keypair`]
         let bytes = [
@@ -186,10 +190,11 @@ mod dev {
             246, 124, 201, 68, 138, 194, 251, 192, 36, 55, 160, 211, 68, 65,
             189, 121, 217,
         ];
-        ed25519c::SecretKey::try_from_slice(&bytes).unwrap()
+        let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
+        ed_sk.try_into_sk().unwrap()
     }
 
-    pub fn matchmaker_keypair() -> ed25519c::SecretKey {
+    pub fn matchmaker_keypair() -> common::SecretKey {
         // generated from
         // [`anoma::types::key::ed25519::gen_keypair`]
         let bytes = [
@@ -197,6 +202,7 @@ mod dev {
             219, 28, 123, 44, 34, 9, 240, 244, 49, 112, 192, 180, 98, 142, 160,
             182, 14,
         ];
-        ed25519c::SecretKey::try_from_slice(&bytes).unwrap()
+        let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
+        ed_sk.try_into_sk().unwrap()
     }
 }
