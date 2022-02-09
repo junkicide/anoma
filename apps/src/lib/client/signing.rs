@@ -3,6 +3,7 @@
 
 use std::rc::Rc;
 
+use anoma::ledger::rpc;
 use anoma::types::address::{Address, ImplicitAddress};
 use anoma::types::key::ed25519::Keypair;
 #[cfg(not(feature = "ABCI"))]
@@ -10,7 +11,6 @@ use tendermint_config::net::Address as TendermintAddress;
 #[cfg(feature = "ABCI")]
 use tendermint_config_abci::net::Address as TendermintAddress;
 
-use super::rpc;
 use crate::cli;
 use crate::wallet::Wallet;
 

@@ -4,6 +4,7 @@ use std::cmp::max;
 use anoma::ledger::parameters::Parameters;
 use anoma::ledger::pos::PosParams;
 use anoma::types::address::Address;
+use anoma::types::rpc::PrefixValue;
 use anoma::types::storage::Key;
 use anoma::types::token::{self, Amount};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -22,7 +23,7 @@ use tendermint_proto_abci::types::EvidenceParams;
 
 use super::*;
 use crate::node::ledger::response;
-use crate::node::ledger::rpc::PrefixValue;
+
 
 impl<D, H> Shell<D, H>
 where
@@ -34,7 +35,7 @@ where
     /// the default if `path` is not a supported string.
     /// INVARIANT: This method must be stateless.
     pub fn query(&self, query: request::Query) -> response::Query {
-        use rpc::Path;
+        use anoma::types::rpc::Path;
         match Path::from_str(&query.path) {
             Ok(path) => match path {
                 Path::DryRunTx => self.dry_run_tx(&query.data),

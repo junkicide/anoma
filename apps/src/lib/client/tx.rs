@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 use std::convert::TryFrom;
 
-use anoma::types::transaction::TxResponse;
+use anoma::types::rpc::{self, TxResponse};
 use anoma::ledger::pos::{BondId, Bonds, Unbonds};
 use anoma::proto::Tx;
 use anoma::types::address::Address;
@@ -33,7 +33,7 @@ use tendermint_rpc_abci::query::{EventType, Query};
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::{Client, HttpClient};
 
-use super::{rpc, signing};
+use super::signing;
 use crate::cli::context::WalletAddress;
 use crate::cli::{args, safe_exit, Context};
 #[cfg(not(feature = "ABCI"))]

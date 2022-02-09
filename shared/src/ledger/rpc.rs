@@ -1,10 +1,14 @@
 //! Client RPC queries
 
-// TODO: remove references to apps crate
-// TODO: in apps crate fix imports of this module
-// TODO: move error and stdout prints to app folder
+// TODO: remove Context and args from functions' parameters
 // TODO: Factor out the code's side-effects to allow to query storage data with any client that impl tendermint_rpc::client::Client and return the typed values (e.g. Result<pos::Bonds, QueryError>
+//      -> Replace all mentions to HttpClient with impl tendermint_rpc::client::Client
+//      -> Do the same also for WebSocketClient?
+// TODO: move error and stdout prints to app folder (where these functions are actually called)
 // TODO: testing?
+// TODO: return Results
+// TODO: remove cli::safe_exit()
+// TODO: fix all TODOs and FIXMEs left around also in other files
 
 use std::borrow::Cow;
 use std::convert::TryInto;
@@ -18,6 +22,7 @@ use crate::ledger::pos::{
 };
 use crate::types::address::Address;
 use crate::types::key::ed25519;
+use crate::types::rpc::{Path, PrefixValue, TxEventQuery, TxResponse};
 use crate::types::storage::Epoch;
 use crate::types::{address, storage, token};
 use borsh::BorshDeserialize;
@@ -46,8 +51,6 @@ use tendermint_rpc_abci::{Client, HttpClient};
 use tendermint_rpc_abci::{Order, SubscriptionClient, WebSocketClient};
 #[cfg(feature = "ABCI")]
 use tendermint_stable::abci::Code;
-
-use crate::node::ledger::rpc::{Path, PrefixValue}; //FIXME:
 
 /// Query the epoch of the last committed block
 pub async fn query_epoch(args: args::Query) -> Epoch {
@@ -996,47 +999,6 @@ pub async fn query_has_storage_key(
         }
     }
     cli::safe_exit(1)
-}
-
-/// Represents a query for an event pertaining to the specified transaction
-
-#[derive(Debug, Clone)]
-pub enum TxEventQuery {
-    Accepted(String),
-    Applied(String),
-}
-
-impl TxEventQuery {
-    /// The event type to which this event query pertains
-    fn event_type(&self) -> &'static str {
-        match self {
-            TxEventQuery::Accepted(_tx_hash) => "accepted",
-            TxEventQuery::Applied(_tx_hash) => "applied",
-        }
-    }
-
-    /// The transaction to which this event query pertains
-    fn tx_hash(&self) -> &String {
-        match self {
-            TxEventQuery::Accepted(tx_hash) => tx_hash,
-            TxEventQuery::Applied(tx_hash) => tx_hash,
-        }
-    }
-}
-
-/// Transaction event queries are semantically a subset of general queries
-
-impl From<TxEventQuery> for Query {
-    fn from(tx_query: TxEventQuery) -> Self {
-        match tx_query {
-            TxEventQuery::Accepted(tx_hash) => {
-                Query::default().and_eq("accepted.hash", tx_hash)
-            }
-            TxEventQuery::Applied(tx_hash) => {
-                Query::default().and_eq("applied.hash", tx_hash)
-            }
-        }
-    }
 }
 
 /// Lookup the full response accompanying the specified transaction event

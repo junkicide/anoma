@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 
+use anoma::ledger::rpc;
 use anoma::proto::Tx;
 use anoma::types::address::{self, Address};
 use anoma::types::dylib;
@@ -27,7 +28,6 @@ use super::gossip::rpc::matchmakers::{
     ClientDialer, ClientListener, MsgFromClient, MsgFromServer,
 };
 use crate::cli::args;
-use crate::client::rpc;
 use crate::client::tx::broadcast_tx;
 use crate::{cli, config, wasm_loader};
 
