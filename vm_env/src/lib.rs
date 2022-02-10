@@ -37,9 +37,7 @@ pub mod vp_prelude {
 
     pub use crate::imports::vp::*;
     pub use crate::intent::vp as intent;
-    pub mod key {
-        pub use crate::key::ed25519::vp as ed25519;
-    }
+    pub use crate::key::vp as key;
     pub use anoma::ledger::pos as proof_of_stake;
 
     pub use crate::token::vp as token;
