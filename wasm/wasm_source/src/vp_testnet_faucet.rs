@@ -5,7 +5,7 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use anoma_vp_prelude::key::{SignedTxData, IntoRef};
+use anoma_vp_prelude::key::{SignedTxData, ToRef};
 use anoma_vp_prelude::*;
 use once_cell::unsync::Lazy;
 
@@ -164,7 +164,7 @@ mod tests {
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::testing::keypair_1();
-        let public_key = &keypair.into_ref();
+        let public_key = &keypair.to_ref();
         let vp_code =
             std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
 
@@ -281,7 +281,7 @@ mod tests {
             let mut tx_env = TestTxEnv::default();
 
             let keypair = key::testing::keypair_1();
-            let public_key = &keypair.into_ref();
+            let public_key = &keypair.to_ref();
 
             // Spawn all the accounts in the storage key to be able to modify
             // their storage
