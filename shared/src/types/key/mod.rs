@@ -221,7 +221,7 @@ pub trait SigScheme : Eq + Ord + Debug + Serialize + Default {
     const TYPE: SchemeType;
     /// Generate a keypair.
     #[cfg(feature = "rand")]
-    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<Self::SecretKey>
+    fn generate<R>(csprng: &mut R) -> Self::SecretKey
     where
         R: CryptoRng + RngCore;
     /// Sign the data with a key.
@@ -403,7 +403,7 @@ pub mod testing {
     use rand::prelude::{StdRng, ThreadRng};
     use rand::{thread_rng, SeedableRng};
     use crate::types::key::*;
-    use super::{SigScheme, SchemeType};
+    use super::SigScheme;
 
     /// A keypair for tests
     pub fn keypair_1() -> <common::SigScheme as SigScheme>::SecretKey {
@@ -428,23 +428,23 @@ pub mod testing {
     }
 
     /// Generate an arbitrary [`Keypair`].
-    pub fn arb_keypair<S: SigScheme>(id: SchemeType) -> impl Strategy<Value = S::SecretKey> {
+    pub fn arb_keypair<S: SigScheme>() -> impl Strategy<Value = S::SecretKey> {
         any::<[u8; 32]>().prop_map(move |seed| {
             let mut rng = StdRng::from_seed(seed);
-            S::generate(&mut rng, id).unwrap().into()
+            S::generate(&mut rng).into()
         })
     }
 
     /// Generate a new random [`Keypair`].
-    pub fn gen_keypair<S: SigScheme>(id: SchemeType) -> S::SecretKey {
+    pub fn gen_keypair<S: SigScheme>() -> S::SecretKey {
         let mut rng: ThreadRng = thread_rng();
-        S::generate(&mut rng, id).unwrap()
+        S::generate(&mut rng)
     }
 }
 
 #[cfg(test)]
 macro_rules! sigscheme_test {
-    ($name:ident, $type:ty, $sid:expr) => {
+    ($name:ident, $type:ty) => {
         pub mod $name {
             use super::*;
 
@@ -455,7 +455,7 @@ macro_rules! sigscheme_test {
                 use rand::thread_rng;
 
                 let mut rng: ThreadRng = thread_rng();
-                let keypair = <$type>::generate(&mut rng, $sid).unwrap();
+                let keypair = <$type>::generate(&mut rng);
                 println!(
                     "keypair {:?}",
                     keypair.try_to_vec().unwrap().as_slice()
@@ -465,7 +465,7 @@ macro_rules! sigscheme_test {
             /// new keypair.
             #[test]
             fn gen_keypair1() {
-                let secret_key = testing::gen_keypair::<$type>($sid);
+                let secret_key = testing::gen_keypair::<$type>();
                 let public_key = secret_key.to_ref();
                 println!("Public key: {}", public_key);
                 println!("Secret key: {}", secret_key);
@@ -475,10 +475,6 @@ macro_rules! sigscheme_test {
 }
 
 #[cfg(test)]
-sigscheme_test!{ed25519_test, ed25519c::SigScheme, ed25519c::SigScheme::TYPE}
+sigscheme_test!{ed25519_test, ed25519c::SigScheme}
 #[cfg(test)]
-sigscheme_test!{common_ed25519_test, common::SigScheme, ed25519c::SigScheme::TYPE}
-#[cfg(test)]
-sigscheme_test!{secp256k1_test, secp256k1::SigScheme, secp256k1::SigScheme::TYPE}
-#[cfg(test)]
-sigscheme_test!{common_secp256k1_test, common::SigScheme, secp256k1::SigScheme::TYPE}
+sigscheme_test!{secp256k1_test, secp256k1::SigScheme}

@@ -728,9 +728,9 @@ pub mod tests {
         let address = gen_established_address();
         let staking_reward_address = gen_established_address();
         let mut rng: ThreadRng = thread_rng();
-        let keypair = common::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap();
+        let keypair: common::SecretKey = ed25519c::SigScheme::generate(&mut rng).try_to_sk().unwrap();
         let kp_arr = keypair.try_to_vec().unwrap();
-        let staking_reward_keypair = common::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap();
+        let staking_reward_keypair: common::SecretKey = ed25519c::SigScheme::generate(&mut rng).try_to_sk().unwrap();
         let srkp_arr = staking_reward_keypair.try_to_vec().unwrap();
         println!("address: {}", address);
         println!("staking_reward_address: {}", staking_reward_address);

@@ -167,15 +167,11 @@ impl super::SigScheme for SigScheme {
     const TYPE: SchemeType = SchemeType::Common;
     
     #[cfg(feature = "rand")]
-    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<SecretKey>
+    fn generate<R>(_csprng: &mut R) -> SecretKey
     where
         R: CryptoRng + RngCore,
     {
-        if sch == ed25519c::SigScheme::TYPE {
-            ed25519c::SigScheme::generate(csprng, sch).map(SecretKey::Ed25519)
-        } else if sch == secp256k1::SigScheme::TYPE {
-            secp256k1::SigScheme::generate(csprng, sch).map(SecretKey::Secp256k1)
-        } else { None }
+        panic!("Cannot generate common signing scheme. Must convert from alternative scheme.");
     }
 
     fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {

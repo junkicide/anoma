@@ -585,7 +585,7 @@ pub mod testing {
 
     /// Generate a new implicit address.
     pub fn gen_implicit_address() -> Address {
-        let keypair = key::testing::gen_keypair::<common::SigScheme>(<ed25519c::SigScheme as key::SigScheme>::TYPE);
+        let keypair: common::SecretKey = key::testing::gen_keypair::<ed25519c::SigScheme>().try_to_sk().unwrap();
         let pkh = PublicKeyHash::from(&keypair.to_ref());
         Address::Implicit(ImplicitAddress(pkh))
     }
@@ -646,7 +646,8 @@ pub mod testing {
 
     /// Generate an arbitrary [`ImplicitAddress`].
     pub fn arb_implicit_address() -> impl Strategy<Value = ImplicitAddress> {
-        key::testing::arb_keypair::<common::SigScheme>(ed25519c::SigScheme::TYPE).prop_map(|keypair| {
+        key::testing::arb_keypair::<ed25519c::SigScheme>().prop_map(|keypair| {
+            let keypair: common::SecretKey = keypair.try_to_sk().unwrap();
             let pkh = PublicKeyHash::from(&keypair.to_ref());
             ImplicitAddress(pkh)
         })

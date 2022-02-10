@@ -221,7 +221,7 @@ impl Store {
     fn generate_keypair() -> common::SecretKey {
         use rand::rngs::OsRng;
         let mut csprng = OsRng {};
-        common::SigScheme::generate(&mut csprng, ed25519c::SigScheme::TYPE).unwrap()
+        ed25519c::SigScheme::generate(&mut csprng).try_to_sk().unwrap()
     }
 
     /// Generate a new keypair and insert it into the store with the provided

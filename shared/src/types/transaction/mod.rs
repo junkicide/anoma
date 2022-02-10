@@ -241,7 +241,7 @@ pub mod tx_types {
             use rand::thread_rng;
 
             let mut rng: ThreadRng = thread_rng();
-            common::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap()
+            ed25519c::SigScheme::generate(&mut rng).try_to_sk().unwrap()
         }
 
         /// Test that process_tx correctly identifies a raw tx with no

@@ -273,13 +273,9 @@ impl super::SigScheme for SigScheme {
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
 
-    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<Self::SecretKey>
+    fn generate<R>(csprng: &mut R) -> Self::SecretKey
     where R: CryptoRng + RngCore {
-        if sch == Self::TYPE {
-            Some(SecretKey(libsecp256k1::SecretKey::random(csprng)))
-        } else {
-            None
-        }
+        SecretKey(libsecp256k1::SecretKey::random(csprng))
     }
     
     /// Sign the data with a key.

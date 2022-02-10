@@ -227,13 +227,11 @@ impl super::SigScheme for SigScheme {
     const TYPE: SchemeType = SchemeType::Ed25519Consensus;
     
     #[cfg(feature = "rand")]
-    fn generate<R>(csprng: &mut R, sch: SchemeType) -> Option<SecretKey>
+    fn generate<R>(csprng: &mut R) -> SecretKey
     where
         R: CryptoRng + RngCore,
     {
-        if sch == Self::TYPE {
-            Some(SecretKey(ed25519_consensus::SigningKey::new(csprng)))
-        } else { None }
+        SecretKey(ed25519_consensus::SigningKey::new(csprng))
     }
 
     fn sign(keypair: &SecretKey, data: impl AsRef<[u8]>) -> Self::Signature {

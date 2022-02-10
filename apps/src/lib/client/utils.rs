@@ -223,7 +223,7 @@ pub fn init_network(
         let validator_dir = accounts_dir.join(name);
 
         // Generate a node key
-        let node_seckey = common::SigScheme::generate(&mut rng, ed25519c::SigScheme::TYPE).unwrap();
+        let node_seckey: common::SecretKey = ed25519c::SigScheme::generate(&mut rng).try_to_sk().unwrap();
         let node_pk: common::PublicKey = node_seckey.to_ref();
 
         // Derive the node ID from the node key
