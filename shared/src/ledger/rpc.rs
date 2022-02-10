@@ -1,30 +1,22 @@
 //! Client RPC queries
 
 // TODO: remove Context and args from functions' parameters
-// TODO: Factor out the code's side-effects to allow to query storage data with any client that impl tendermint_rpc::client::Client and return the typed values (e.g. Result<pos::Bonds, QueryError>
-//      -> Replace all mentions to HttpClient with impl tendermint_rpc::client::Client
-//      -> Do the same also for SubscriptionClient?
-// TODO: move error and stdout prints to app folder (where these functions are actually called)
-// TODO: testing?
+// TODO: Factor out the code's side-effects to allow to query storage data with
+// any client that impl tendermint_rpc::client::Client and return the typed
+// values (e.g. Result<pos::Bonds, QueryError>      -> Replace all mentions to
+// HttpClient with impl tendermint_rpc::client::Client      -> Do the same also
+// for SubscriptionClient? TODO: move error and stdout prints to app folder
+// (where these functions are actually called) TODO: testing?
 // TODO: return Results instead of printing
-// TODO: remove cli::safe_exit()
+// TODO: remove cli::safe_exit() or move them where the functions are called
+// TODO: remove unwraps ?
 // TODO: fix all TODOs and FIXMEs left around also in other files
 
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::io::{self, Write};
 
-use crate::ledger::pos::types::{
-    Epoch as PosEpoch, VotingPower, WeightedValidator,
-};
-use crate::ledger::pos::{
-    self, is_validator_slashes_key, Bonds, Slash, Unbonds,
-};
-use crate::types::address::Address;
-use crate::types::key::ed25519;
-use crate::types::rpc::{Path, PrefixValue, TxEventQuery, TxResponse};
-use crate::types::storage::Epoch;
-use crate::types::{address, storage, token};
 use borsh::BorshDeserialize;
 use itertools::Itertools;
 #[cfg(not(feature = "ABCI"))]
@@ -51,48 +43,122 @@ use tendermint_rpc_abci::{Client, HttpClient};
 use tendermint_rpc_abci::{Order, SubscriptionClient, WebSocketClient};
 #[cfg(feature = "ABCI")]
 use tendermint_stable::abci::Code;
+use thiserror::Error;
+
+use crate::ledger::pos::types::{
+    Epoch as PosEpoch, VotingPower, WeightedValidator,
+};
+use crate::ledger::pos::{
+    self, is_validator_slashes_key, Bonds, Slash, Unbonds,
+};
+use crate::types::address::Address;
+use crate::types::key::ed25519;
+use crate::types::rpc::{Path, PrefixValue, TxEventQuery, TxResponse};
+use crate::types::token::Amount;
+use crate::types::storage::Epoch;
+use crate::types::{address, storage, token};
 
 // TODO: create custom error, QueryError
+#[derive(Error)]
+pub enum QueryError {
+    #[error("Error decoding the epoch value: {0}")]
+    Decoding(#[from] TError),
+    #[error("Error in the query {0} (error code {1})")]
+    Format(String, u32),
+}
+
+/// Represents the result of a balance query. First Address is the Owner one,
+/// nested Address is the token one.
+pub struct BalanceQueryResult(HashMap<&Address, HashMap<&Address, Amount>>);
+
+impl Deref for BalanceQueryResult {
+    type Target: HashMap<&Address, HashMap<&Address, Amount>>;
+
+    fn deref(&self) -> &Self::Target {
+        self.0
+    }
+}
+
+impl BalanceQueryResult {
+    fn new() -> Self {
+        BalanceQueryResult(HashMap::new())
+    }
+
+    /// Update the given keys if exist, otherwise insert them
+    fn insert(&mut self, owner: &Address, token: &Address, balance: Amount) {
+        match self.get_mut(owner) {
+            // FIXME: improve this block
+            Some(token_map) => {
+                token_map.insert(token, balance);
+            }
+            None => {
+                let token_map = HashMap::new();
+                token_map.insert(token, balance);
+                self.insert(owner, token_map);
+            }
+        }
+    }
+
+    pub fn get_balance(
+        &self,
+        owner: &Address,
+        token: &Address,
+    ) -> Option<Amount> {
+        match self.get(owner) {
+            Some(token) => self.get(token), // FIXME: need clone here?
+            None => None,
+        }
+    }
+}
 
 /// Query the epoch of the last committed block
-pub async fn query_epoch(client: impl Client) -> Result<Epoch, QueryError> {
+pub async fn query_epoch(client: &dyn Client) -> Result<Epoch, QueryError> {
     let path = Path::Epoch;
     let data = vec![];
     let response = client
         .abci_query(Some(path.into()), data, None, false)
         .await
         .unwrap();
-    match response.code {
-        Code::Ok => match Epoch::try_from_slice(&response.value[..]) {
-            Ok(epoch) => {
-                println!("Last committed epoch: {}", epoch);
-                return epoch;
-            }
 
-            Err(err) => {
-                eprintln!("Error decoding the epoch value: {}", err)
-            }
-        },
-        Code::Err(err) => eprintln!(
-            "Error in the query {} (error code {})",
-            response.info, err
-        ),
+    match response.code {
+        Code::Ok => Ok(Epoch::try_from_slice(&response.value[..])?),
+        Code::Err(err) => Err(QueryError::Format(response.info, err)),
     }
-    cli::safe_exit(1)
+    // match response.code { //FIXME: remove if it works
+    //     Code::Ok => match Epoch::try_from_slice(&response.value[..]) {
+    //         Ok(epoch) => {
+    //             Ok(epoch)
+    //         },
+    //         Err(err) => {
+    //             Err(QueryError::Decoding(err))
+    //         }
+    //     },
+    //     Code::Err(err) => Err(QueryError::Format(response.info, err))
+    // }
 }
 
 /// Query token balance(s)
-/// 
+///
 /// Arguments owner and token are Options, the function will produce a result
 /// based on the effective values of these arguments.
-/// 
+///
 /// Cases (token, owner):
 ///     Some, Some: returns the balance of token for owner
 ///     None, Some: returns the balances of all the tokens owned by owner
 ///     Some, None: returns the balances of token for all the users owning token
 ///     None, None: returns the balances of all the tokens for all the users
-pub async fn query_balance(client: impl Client, token: Option<&Address>, owner: Option<&Address>){
+///
+/// # Returns
+/// * A struct `BalanceQueryResult` holding the actual balance(s).
+/// FIXME: this forces the caller to actually perform two calls: one to this
+///     function and one on the struct returned to get the actual Amount
+pub async fn query_balance(
+    client: &dyn Client,
+    token: Option<&Address>,
+    owner: Option<&Address>,
+) -> BalanceQueryResult {
     let tokens = address::tokens();
+    let result = BalanceQueryResult::new();
     match (token, owner) {
         (Some(token), Some(owner)) => {
             let key = token::balance_key(token, owner);
@@ -100,81 +166,56 @@ pub async fn query_balance(client: impl Client, token: Option<&Address>, owner: 
                 .get(token)
                 .map(|c| Cow::Borrowed(*c))
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
-            match query_storage_value::<token::Amount>(client, key).await {
-                Some(balance) => {
-                    println!("{}: {}", currency_code, balance);
-                }
-                None => {
-                    println!("No {} balance found for {}", currency_code, owner)
-                }
+
+            if let Some(balance) =
+                query_storage_value::<token::Amount>(client, key).await
+            {
+                result.insert(owner, token, balance);
             }
         }
         (None, Some(owner)) => {
-            let mut found_any = false;
             for (token, currency_code) in tokens {
                 let key = token::balance_key(&token, owner);
                 if let Some(balance) =
                     query_storage_value::<token::Amount>(client.clone(), key)
                         .await
                 {
-                    println!("{}: {}", currency_code, balance);
-                    found_any = true;
+                    result.insert(owner, &token, balance);
                 }
-            }
-            if !found_any {
-                println!("No balance found for {}", owner);
             }
         }
         (Some(token), None) => {
             let key = token::balance_prefix(token);
-            let balances =
-                query_storage_prefix::<token::Amount>(client, key).await;
-            match balances {
-                Some(balances) => {
-                    let currency_code = tokens
-                        .get(token)
-                        .map(|c| Cow::Borrowed(*c))
-                        .unwrap_or_else(|| Cow::Owned(token.to_string()));
-                    let stdout = io::stdout();
-                    let mut w = stdout.lock();
-                    writeln!(w, "Token {}:", currency_code).unwrap();
-                    for (key, balance) in balances {
-                        let owner =
-                            token::is_any_token_balance_key(&key).unwrap();
-                        writeln!(w, "  {}, owned by {}", balance, owner)
-                            .unwrap();
-                    }
-                }
-                None => {
-                    println!("No balances for token {}", token.encode())
+            if let Some(balances) =
+                query_storage_prefix::<token::Amount>(client, key).await
+            {
+                let currency_code = tokens
+                    .get(token)
+                    .map(|c| Cow::Borrowed(*c))
+                    .unwrap_or_else(|| Cow::Owned(token.to_string()));
+                for (key, balance) in balances {
+                    let owner = token::is_any_token_balance_key(&key).unwrap();
+                    result.insert(owner, token, balance);
                 }
             }
         }
         (None, None) => {
-            let stdout = io::stdout();
-            let mut w = stdout.lock();
             for (token, currency_code) in tokens {
                 let key = token::balance_prefix(&token);
-                let balances =
+                if let Some(balances) =
                     query_storage_prefix::<token::Amount>(client.clone(), key)
-                        .await;
-                match balances {
-                    Some(balances) => {
-                        writeln!(w, "Token {}:", currency_code).unwrap();
-                        for (key, balance) in balances {
-                            let owner =
-                                token::is_any_token_balance_key(&key).unwrap();
-                            writeln!(w, "  {}, owned by {}", balance, owner)
-                                .unwrap();
-                        }
-                    }
-                    None => {
-                        println!("No balances for token {}", token.encode())
+                        .await
+                {
+                    for (key, balance) in balances {
+                        let owner =
+                            token::is_any_token_balance_key(&key).unwrap();
+                        result.insert(owner, &token, balance);
                     }
                 }
             }
         }
     }
+    result
 }
 
 /// Query PoS bond(s)
@@ -1059,8 +1100,7 @@ pub async fn query_tx_response(
         )
     })?;
     // Reformat the event attributes so as to ease value extraction
-    let event_map: std::collections::HashMap<&str, &str> = (&query_event
-        .attributes)
+    let event_map: HashMap<&str, &str> = (&query_event.attributes)
         .iter()
         .map(|tag| (tag.key.as_ref(), tag.value.as_ref()))
         .collect();

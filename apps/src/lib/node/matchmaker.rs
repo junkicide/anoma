@@ -306,6 +306,18 @@ impl ResultHandler {
     }
 
     async fn submit_tx(&self, tx_data: Vec<u8>) {
+        let client = HttpClient::new(self.ledger_address.clone()).unwrap();
+        let epoch = match rpc::query_epoch(&client).await {
+            Ok(v) => {
+                println!("Last committed epoch: {}", v);
+                v
+            },
+            Err(e) => {
+                eprintln!(e);
+                cli::safe_exit(1) //FIXME: correct?
+            }
+        };
+    
         let tx_code = self.tx_code.clone();
         let matches = MatchedExchanges::try_from_slice(&tx_data[..]).unwrap();
         let intent_transfers = IntentTransfers {
@@ -319,10 +331,7 @@ impl ResultHandler {
                 token: address::xan(),
             },
             &self.tx_signing_key,
-            rpc::query_epoch(args::Query {
-                ledger_address: self.ledger_address.clone(),
-            })
-            .await,
+            epoch,
             0.into(),
             Tx::new(tx_code, Some(tx_data)).sign(&self.tx_signing_key),
         );

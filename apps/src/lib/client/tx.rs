@@ -559,10 +559,17 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
-    let epoch = rpc::query_epoch(args::Query {
-        ledger_address: args.tx.ledger_address.clone(),
-    })
-    .await;
+    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+    let epoch = match rpc::query_epoch(&client).await {
+        Ok(v) => {
+            println!("Last committed epoch: {}", v);
+            v
+        },
+        Err(e) => {
+            eprintln!(e);
+            safe_exit(1) //FIXME: correct?
+        }
+    };
 
     let validator = ctx.get(&args.validator);
     // Check that the validator address exists on chain
@@ -588,7 +595,6 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
         validator: validator.clone(),
     };
     let bond_key = ledger::pos::unbond_key(&bond_id);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     let unbonds =
         rpc::query_storage_value::<Unbonds>(client.clone(), bond_key).await;
     match unbonds {
@@ -681,10 +687,19 @@ async fn process_tx(
         rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
         (ctx, vec![])
     } else {
-        let epoch = rpc::query_epoch(args::Query {
-            ledger_address: args.ledger_address.clone(),
-        })
-        .await;
+        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
+
+        let epoch = match rpc::query_epoch(&client).await {
+            Ok(v) => {
+                println!("Last committed epoch: {}", v);
+                v
+            },
+            Err(e) => {
+                eprintln!(e);
+                safe_exit(1) //FIXME: correct?
+            }
+        };
+
         let tx = WrapperTx::new(
             Fee {
                 amount: args.fee_amount,

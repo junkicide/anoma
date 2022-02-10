@@ -6,18 +6,19 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use crate::types::address::Address;
-use crate::types::storage;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(not(feature = "ABCI"))]
 use tendermint::abci::Path as AbciPath;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::query::Query;
 #[cfg(feature = "ABCI")]
-use tendermint_stable::abci::Path as AbciPath;
-#[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::query::Query;
+#[cfg(feature = "ABCI")]
+use tendermint_stable::abci::Path as AbciPath;
 use thiserror::Error;
+
+use crate::types::address::Address;
+use crate::types::storage;
 
 /// RPC query path
 #[derive(Debug, Clone)]
@@ -120,7 +121,6 @@ pub enum PathParseError {
     #[error("Invalid storage key: {0}")]
     InvalidStorageKey(storage::Error),
 }
-
 
 /// A data type to represent the response of a tx.
 #[derive(Debug, Serialize)]
