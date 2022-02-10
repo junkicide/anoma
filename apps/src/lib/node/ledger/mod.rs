@@ -532,7 +532,7 @@ async fn wait_for_abort(
 #[cfg(not(any(unix, windows)))]
 async fn wait_for_abort(
     mut abort_recv: tokio::sync::mpsc::UnboundedReceiver<&'static str>,
-)-> bool {
+) -> bool {
     let _ = tokio::select! {
         signal = tokio::signal::ctrl_c() => {
             match signal {
