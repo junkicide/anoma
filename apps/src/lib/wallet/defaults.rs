@@ -121,7 +121,7 @@ mod dev {
     /// An implicit user address for testing & development
     pub fn daewon_address() -> Address {
         // "atest1d9khqw36xprrzdpk89rrws69g4z5vd6pgv65gvjrgeqnv3pcg4zns335xymry335gcerqs3etd0xfa"
-        (&daewon_keypair().into_ref()).into()
+        (&daewon_keypair().to_ref()).into()
     }
 
     /// An established validator address for testing & development
@@ -143,7 +143,7 @@ mod dev {
             78, 188, 33,
         ];
         let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_into_sk().unwrap()
+        ed_sk.try_to_sk().unwrap()
     }
 
     pub fn bertha_keypair() -> common::SecretKey {
@@ -155,7 +155,7 @@ mod dev {
             119, 243,
         ];
         let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_into_sk().unwrap()
+        ed_sk.try_to_sk().unwrap()
     }
 
     pub fn christel_keypair() -> common::SecretKey {
@@ -167,7 +167,7 @@ mod dev {
             70, 20, 130, 253,
         ];
         let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_into_sk().unwrap()
+        ed_sk.try_to_sk().unwrap()
     }
 
     pub fn daewon_keypair() -> common::SecretKey {
@@ -179,7 +179,7 @@ mod dev {
             57, 50,
         ];
         let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_into_sk().unwrap()
+        ed_sk.try_to_sk().unwrap()
     }
 
     pub fn validator_keypair() -> common::SecretKey {
@@ -191,7 +191,7 @@ mod dev {
             189, 121, 217,
         ];
         let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_into_sk().unwrap()
+        ed_sk.try_to_sk().unwrap()
     }
 
     pub fn matchmaker_keypair() -> common::SecretKey {
@@ -203,6 +203,6 @@ mod dev {
             182, 14,
         ];
         let ed_sk = ed25519c::SecretKey::try_from_slice(&bytes).unwrap();
-        ed_sk.try_into_sk().unwrap()
+        ed_sk.try_to_sk().unwrap()
     }
 }

@@ -10,7 +10,7 @@ use serde::de::{Visitor, Error, SeqAccess};
 use serde::ser::SerializeTuple;
 use std::fmt;
 use std::str::FromStr;
-use super::{ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, VerifySigError, IntoRef, SchemeType, SigScheme as SigSchemeTrait};
+use super::{ParsePublicKeyError, ParseSecretKeyError, ParseSignatureError, VerifySigError, ToRef, SchemeType, SigScheme as SigSchemeTrait};
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
 
@@ -118,8 +118,8 @@ impl super::SecretKey for SecretKey {
     }
 }
 
-impl IntoRef<PublicKey> for SecretKey {
-    fn into_ref(&self) -> PublicKey {
+impl ToRef<PublicKey> for SecretKey {
+    fn to_ref(&self) -> PublicKey {
         PublicKey(libsecp256k1::PublicKey::from_secret_key(&self.0))
     }
 }

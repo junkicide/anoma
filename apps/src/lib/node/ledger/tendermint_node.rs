@@ -237,7 +237,7 @@ pub async fn write_validator_key_async(
         .expect("Couldn't create private validator key file");
     let address = address.raw_hash().unwrap();
     let key = ed25519c::SecretKey::try_from_sk(consensus_key).map(|sk| {
-        let pk: ed25519c::PublicKey = sk.into_ref();
+        let pk: ed25519c::PublicKey = sk.to_ref();
         let ck_arr =
             [sk.try_to_vec().unwrap(),
              pk.try_to_vec().unwrap()].concat();
@@ -253,7 +253,7 @@ pub async fn write_validator_key_async(
             }
         })
     }).or_else(|_err| { secp256k1::SecretKey::try_from_sk(consensus_key).map(|sk| {
-        let pk: secp256k1::PublicKey = sk.into_ref();
+        let pk: secp256k1::PublicKey = sk.to_ref();
         let ck_arr =
             [sk.try_to_vec().unwrap(),
              pk.try_to_vec().unwrap()].concat();
@@ -296,7 +296,7 @@ pub fn write_validator_key(
         .expect("Couldn't create private validator key file");
     let address = address.raw_hash().unwrap();
     let key = ed25519c::SecretKey::try_from_sk(consensus_key).map(|sk| {
-        let pk: ed25519c::PublicKey = sk.into_ref();
+        let pk: ed25519c::PublicKey = sk.to_ref();
         let ck_arr =
             [sk.try_to_vec().unwrap(),
              pk.try_to_vec().unwrap()].concat();
@@ -312,7 +312,7 @@ pub fn write_validator_key(
             }
         })
     }).or_else(|_err| { secp256k1::SecretKey::try_from_sk(consensus_key).map(|sk| {
-        let pk: secp256k1::PublicKey = sk.into_ref();
+        let pk: secp256k1::PublicKey = sk.to_ref();
         let ck_arr =
             [sk.try_to_vec().unwrap(),
              pk.try_to_vec().unwrap()].concat();

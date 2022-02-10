@@ -91,10 +91,10 @@ pub enum ParseSecretKeyError {
 
 /// A value-to-value conversion that consumes the input value.
 
-pub trait IntoRef<T>
+pub trait ToRef<T>
 {
     /// Performs the conversion.
-    fn into_ref(&self) -> T;
+    fn to_ref(&self) -> T;
 }
 
 /// Simple and safe type conversions that may fail in a controlled
@@ -138,7 +138,7 @@ pub trait Signature : Hash
             }
         }
         /// Convert from self to another SecretKey type
-        fn try_into_sig<PK: Signature>(&self) -> Result<PK, ParseSignatureError> {
+        fn try_to_sig<PK: Signature>(&self) -> Result<PK, ParseSignatureError> {
             PK::try_from_sig(self)
         }
     }
@@ -169,7 +169,7 @@ pub trait PublicKey : BorshSerialize
             }
         }
         /// Convert from self to another SecretKey type
-        fn try_into_pk<PK: PublicKey>(&self) -> Result<PK, ParsePublicKeyError> {
+        fn try_to_pk<PK: PublicKey>(&self) -> Result<PK, ParsePublicKeyError> {
             PK::try_from_pk(self)
         }
     }
@@ -180,7 +180,7 @@ pub trait SecretKey : BorshSerialize
     + BorshDeserialize
     + Display
     + Debug
-    + IntoRef<Self::PublicKey>
+    + ToRef<Self::PublicKey>
     + FromStr<Err = ParseSecretKeyError>
     + Clone
     + Sync
@@ -200,7 +200,7 @@ pub trait SecretKey : BorshSerialize
             }
         }
         /// Convert from self to another SecretKey type
-        fn try_into_sk<PK: SecretKey>(&self) -> Result<PK, ParseSecretKeyError> {
+        fn try_to_sk<PK: SecretKey>(&self) -> Result<PK, ParseSecretKeyError> {
             PK::try_from_sk(self)
         }
     }
@@ -413,7 +413,7 @@ pub mod testing {
             113, 94, 30, 213, 84, 175, 184, 235, 169, 70, 175, 36, 252, 45,
             190, 138, 79,
         ];
-        ed25519c::SecretKey::try_from_slice(bytes.as_ref()).unwrap().try_into_sk().unwrap()
+        ed25519c::SecretKey::try_from_slice(bytes.as_ref()).unwrap().try_to_sk().unwrap()
     }
 
     /// A keypair for tests
@@ -424,7 +424,7 @@ pub mod testing {
             205, 71, 213, 158, 25, 253, 52, 217, 87, 52, 171, 225, 110, 131,
             238, 58, 94, 56,
         ];
-        ed25519c::SecretKey::try_from_slice(bytes.as_ref()).unwrap().try_into_sk().unwrap()
+        ed25519c::SecretKey::try_from_slice(bytes.as_ref()).unwrap().try_to_sk().unwrap()
     }
 
     /// Generate an arbitrary [`Keypair`].
@@ -466,7 +466,7 @@ macro_rules! sigscheme_test {
             #[test]
             fn gen_keypair1() {
                 let secret_key = testing::gen_keypair::<$type>($sid);
-                let public_key = secret_key.into_ref();
+                let public_key = secret_key.to_ref();
                 println!("Public key: {}", public_key);
                 println!("Secret key: {}", secret_key);
             }

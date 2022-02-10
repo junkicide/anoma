@@ -51,7 +51,7 @@ impl Store {
         // Pre-load the default keys without encryption
         let no_password = None;
         for (alias, keypair) in super::defaults::keys() {
-            let pkh: PublicKeyHash = (&keypair.into_ref()).into();
+            let pkh: PublicKeyHash = (&keypair.to_ref()).into();
             store.keys.insert(
                 alias.clone(),
                 StoredKeypair::new(keypair, no_password.clone()).0,
@@ -235,7 +235,7 @@ impl Store {
         password: Option<String>,
     ) -> (String, Rc<common::SecretKey>) {
         let keypair = Self::generate_keypair();
-        let pkh: PublicKeyHash = PublicKeyHash::from(&keypair.into_ref());
+        let pkh: PublicKeyHash = PublicKeyHash::from(&keypair.to_ref());
         let (keypair_to_store, raw_keypair) =
             StoredKeypair::new(keypair, password);
         let address = Address::Implicit(ImplicitAddress(pkh.clone()));

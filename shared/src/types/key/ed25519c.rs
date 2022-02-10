@@ -11,7 +11,7 @@ use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    ParsePublicKeyError, IntoRef, VerifySigError, SchemeType, ParseSecretKeyError, ParseSignatureError, SigScheme as SigSchemeTrait
+    ParsePublicKeyError, ToRef, VerifySigError, SchemeType, ParseSecretKeyError, ParseSignatureError, SigScheme as SigSchemeTrait
 };
 
 /// Ed25519 public key
@@ -112,8 +112,8 @@ impl super::SecretKey for SecretKey {
     }
 }
 
-impl IntoRef<PublicKey> for SecretKey {
-    fn into_ref(&self) -> PublicKey {
+impl ToRef<PublicKey> for SecretKey {
+    fn to_ref(&self) -> PublicKey {
         PublicKey(self.0.verification_key())
     }
 }
