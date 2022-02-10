@@ -33,7 +33,7 @@ use anoma::types::transaction::{
     hash_tx, process_tx, verify_decrypted_correctly, AffineCurve, DecryptedTx,
     EllipticCurve, PairingEngine, TxType, WrapperTx,
 };
-use anoma::types::{address, key, token};
+use anoma::types::{address, key::{self, PublicKey}, token};
 use anoma::vm::wasm::{TxCache, VpCache};
 use anoma::vm::WasmCacheRwAccess;
 use borsh::BorshSerialize;
@@ -54,6 +54,10 @@ use thiserror::Error;
 use tower_abci::{request, response};
 #[cfg(feature = "ABCI")]
 use tower_abci_old::{request, response};
+#[cfg(feature = "ABCI")]
+use tendermint_proto_abci::crypto::public_key;
+#[cfg(not(feature = "ABCI"))]
+use tendermint_proto::crypto::public_key;
 
 use super::rpc;
 use crate::config;
@@ -62,6 +66,13 @@ use crate::node::ledger::events::Event;
 use crate::node::ledger::shims::abcipp_shim_types::shim;
 use crate::node::ledger::shims::abcipp_shim_types::shim::response::TxResult;
 use crate::node::ledger::{protocol, storage, tendermint_node};
+
+fn key_to_tendermint<PK: key::PublicKey>(pk: &PK) -> std::result::Result<public_key::Sum, key::ParsePublicKeyError> {
+    key::ed25519c::PublicKey::try_from_pk(pk)
+        .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap()))
+        .or_else(|_err| key::secp256k1::PublicKey::try_from_pk(pk)
+                 .map(|pk| public_key::Sum::Secp256k1(pk.try_to_vec().unwrap())))
+}
 
 #[derive(Error, Debug)]
 pub enum Error {

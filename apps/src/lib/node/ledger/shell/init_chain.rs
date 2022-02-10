@@ -7,15 +7,13 @@ use sha2::{Digest, Sha256};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::abci;
 #[cfg(not(feature = "ABCI"))]
-use tendermint_proto::crypto::{public_key, PublicKey as TendermintPublicKey};
+use tendermint_proto::crypto::PublicKey as TendermintPublicKey;
 #[cfg(not(feature = "ABCI"))]
 use tendermint_proto::google::protobuf;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::abci;
 #[cfg(feature = "ABCI")]
-use tendermint_proto_abci::crypto::{
-    public_key, PublicKey as TendermintPublicKey,
-};
+use tendermint_proto_abci::crypto::PublicKey as TendermintPublicKey;
 #[cfg(feature = "ABCI")]
 use tendermint_proto_abci::google::protobuf;
 
@@ -266,11 +264,7 @@ where
             let consensus_key: common::PublicKey =
                 validator.pos_data.consensus_key.clone();
             let pub_key = TendermintPublicKey {
-                sum: Some(ed25519c::PublicKey::try_from_pk(&consensus_key)
-                          .map(|pk| public_key::Sum::Ed25519(pk.try_to_vec().unwrap()))
-                          .or_else(|_err| secp256k1::PublicKey::try_from_pk(&consensus_key)
-                          .map(|pk| public_key::Sum::Secp256k1(pk.try_to_vec().unwrap())))
-                    .unwrap())
+                sum: Some(key_to_tendermint(&consensus_key).unwrap())
             };
             abci_validator.pub_key = Some(pub_key);
             let power: u64 =
