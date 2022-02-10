@@ -137,7 +137,7 @@ impl Address {
     pub fn raw_hash(&self) -> Option<&str> {
         match self {
             Address::Established(established) => Some(&established.hash),
-            Address::Implicit(ImplicitAddress::Ed25519(implicit)) => {
+            Address::Implicit(ImplicitAddress(implicit)) => {
                 Some(&implicit.0)
             }
             Address::Internal(_) => None,
@@ -150,7 +150,7 @@ impl Address {
             Address::Established(EstablishedAddress { hash }) => {
                 format!("{}::{}", PREFIX_ESTABLISHED, hash)
             }
-            Address::Implicit(ImplicitAddress::Ed25519(pkh)) => {
+            Address::Implicit(ImplicitAddress(pkh)) => {
                 format!("{}::{}", PREFIX_IMPLICIT, pkh)
             }
             Address::Internal(internal) => {
@@ -202,7 +202,7 @@ impl Address {
             Some((PREFIX_IMPLICIT, pkh)) => {
                 let pkh = PublicKeyHash::from_str(pkh)
                     .map_err(|err| Error::new(ErrorKind::InvalidData, err))?;
-                Ok(Address::Implicit(ImplicitAddress::Ed25519(pkh)))
+                Ok(Address::Implicit(ImplicitAddress(pkh)))
             }
             Some((PREFIX_INTERNAL, raw)) => match string {
                 internal::POS => Ok(Address::Internal(InternalAddress::PoS)),
@@ -364,14 +364,11 @@ impl EstablishedAddressGen {
     Serialize,
     Deserialize,
 )]
-pub enum ImplicitAddress {
-    /// Address derived from [`key::ed25519::PublicKeyHash`]
-    Ed25519(key::PublicKeyHash),
-}
+pub struct ImplicitAddress(pub key::PublicKeyHash);
 
 impl From<&key::common::PublicKey> for ImplicitAddress {
     fn from(pk: &key::common::PublicKey) -> Self {
-        ImplicitAddress::Ed25519(pk.into())
+        ImplicitAddress(pk.into())
     }
 }
 
@@ -590,7 +587,7 @@ pub mod testing {
     pub fn gen_implicit_address() -> Address {
         let keypair = key::testing::gen_keypair::<common::SigScheme>(<ed25519c::SigScheme as key::SigScheme>::TYPE);
         let pkh = PublicKeyHash::from(&keypair.into_ref());
-        Address::Implicit(ImplicitAddress::Ed25519(pkh))
+        Address::Implicit(ImplicitAddress(pkh))
     }
 
     /// A sampled established address for tests
@@ -651,7 +648,7 @@ pub mod testing {
     pub fn arb_implicit_address() -> impl Strategy<Value = ImplicitAddress> {
         key::testing::arb_keypair::<common::SigScheme>(ed25519c::SigScheme::TYPE).prop_map(|keypair| {
             let pkh = PublicKeyHash::from(&keypair.into_ref());
-            ImplicitAddress::Ed25519(pkh)
+            ImplicitAddress(pkh)
         })
     }
 

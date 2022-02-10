@@ -45,7 +45,7 @@ pub async fn find_keypair(
                 cli::safe_exit(1)
             })
         }
-        Address::Implicit(ImplicitAddress::Ed25519(pkh)) => {
+        Address::Implicit(ImplicitAddress(pkh)) => {
             wallet.find_key_by_pkh(pkh).unwrap_or_else(|err| {
                 eprintln!(
                     "Unable to load the keypair from the wallet for the \
