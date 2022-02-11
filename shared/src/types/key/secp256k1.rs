@@ -273,6 +273,7 @@ impl super::SigScheme for SigScheme {
     type PublicKey = PublicKey;
     type SecretKey = SecretKey;
 
+    #[cfg(feature = "rand")]
     fn generate<R>(csprng: &mut R) -> Self::SecretKey
     where R: CryptoRng + RngCore {
         SecretKey(libsecp256k1::SecretKey::random(csprng))
