@@ -8,9 +8,11 @@
 // for SubscriptionClient? TODO: move error and stdout prints to app folder
 // (where these functions are actually called) TODO: testing?
 // TODO: return Results instead of printing
-// TODO: remove cli::safe_exit() or move them where the functions are called
+// TODO: remove cli::safe_exit() and move them where the functions are called
 // TODO: remove unwraps ?
 // TODO: fix all TODOs and FIXMEs left around also in other files
+// TODO: improve docs
+// TODO: move all structs to types dir?
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -33,6 +35,7 @@ use tendermint_rpc::query::Query;
 use tendermint_rpc::{Client, HttpClient};
 #[cfg(not(feature = "ABCI"))]
 use tendermint_rpc::{Order, SubscriptionClient, WebSocketClient};
+use tendermint_rpc_abci::endpoint::abci_query::AbciQuery;
 #[cfg(feature = "ABCI")]
 use tendermint_rpc_abci::error::Error as TError;
 #[cfg(feature = "ABCI")]
@@ -69,15 +72,7 @@ pub enum QueryError {
 
 /// Represents the result of a balance query. First Address is the Owner one,
 /// nested Address is the token one.
-pub struct BalanceQueryResult(HashMap<&Address, HashMap<&Address, Amount>>);
-
-impl Deref for BalanceQueryResult {
-    type Target: HashMap<&Address, HashMap<&Address, Amount>>;
-
-    fn deref(&self) -> &Self::Target {
-        self.0
-    }
-}
+pub struct BalanceQueryResult(HashMap<Address, HashMap<Address, Amount>>);
 
 impl BalanceQueryResult {
     fn new() -> Self {
@@ -85,8 +80,8 @@ impl BalanceQueryResult {
     }
 
     /// Update the given keys if exist, otherwise insert them
-    fn insert(&mut self, owner: &Address, token: &Address, balance: Amount) {
-        match self.get_mut(owner) {
+    fn insert(&mut self, owner: Address, token: Address, balance: Amount) {
+        match self.0.get_mut(&owner) { //FIXME: deref?
             // FIXME: improve this block
             Some(token_map) => {
                 token_map.insert(token, balance);
@@ -104,15 +99,17 @@ impl BalanceQueryResult {
         owner: &Address,
         token: &Address,
     ) -> Option<Amount> {
-        match self.get(owner) {
-            Some(token) => self.get(token), // FIXME: need clone here?
+        match self.0.get(owner) { //FIXME: deref?
+            Some(token) => Some(self.0.get(token).clone()),
             None => None,
         }
     }
 }
 
-/// Query the epoch of the last committed block
-pub async fn query_epoch(client: &dyn Client) -> Result<Epoch, QueryError> {
+
+/// Query the epoch of the last committed block.
+pub async fn query_epoch<T>(client: T) -> Result<Epoch, QueryError>
+where T: Client {
     let path = Path::Epoch;
     let data = vec![];
     let response = client
@@ -147,16 +144,15 @@ pub async fn query_epoch(client: &dyn Client) -> Result<Epoch, QueryError> {
 ///     None, Some: returns the balances of all the tokens owned by owner
 ///     Some, None: returns the balances of token for all the users owning token
 ///     None, None: returns the balances of all the tokens for all the users
-///
-/// # Returns
-/// * A struct `BalanceQueryResult` holding the actual balance(s).
+/// 
 /// FIXME: this forces the caller to actually perform two calls: one to this
 ///     function and one on the struct returned to get the actual Amount
-pub async fn query_balance(
-    client: &dyn Client,
+pub async fn query_balance<T>(
+    client: T,
     token: Option<&Address>,
     owner: Option<&Address>,
-) -> BalanceQueryResult {
+) -> BalanceQueryResult
+where T: Client {
     let tokens = address::tokens();
     let result = BalanceQueryResult::new();
     match (token, owner) {
@@ -170,7 +166,7 @@ pub async fn query_balance(
             if let Some(balance) =
                 query_storage_value::<token::Amount>(client, key).await
             {
-                result.insert(owner, token, balance);
+                result.insert(owner.to_owned(), token.to_owned(), balance);
             }
         }
         (None, Some(owner)) => {
@@ -180,7 +176,7 @@ pub async fn query_balance(
                     query_storage_value::<token::Amount>(client.clone(), key)
                         .await
                 {
-                    result.insert(owner, &token, balance);
+                    result.insert(owner.to_owned(), token, balance);
                 }
             }
         }
@@ -195,7 +191,7 @@ pub async fn query_balance(
                     .unwrap_or_else(|| Cow::Owned(token.to_string()));
                 for (key, balance) in balances {
                     let owner = token::is_any_token_balance_key(&key).unwrap();
-                    result.insert(owner, token, balance);
+                    result.insert(owner.to_owned(), token.to_owned(), balance);
                 }
             }
         }
@@ -209,7 +205,7 @@ pub async fn query_balance(
                     for (key, balance) in balances {
                         let owner =
                             token::is_any_token_balance_key(&key).unwrap();
-                        result.insert(owner, &token, balance);
+                        result.insert(owner.to_owned(), token, balance);
                     }
                 }
             }
@@ -219,15 +215,14 @@ pub async fn query_balance(
 }
 
 /// Query PoS bond(s)
-pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
-    let epoch = query_epoch(args.query.clone()).await;
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
-    match (args.owner, args.validator) {
+/// FIXME: should Address be a generic?
+pub async fn query_bonds<T>(client: T, owner: Option<&Address>, validator: Option<&Address>) ->  //FIXME: fix return value
+where T: Client {
+    let epoch = query_epoch(client).await?;
+    match (owner, validator) {
         (Some(owner), Some(validator)) => {
-            let source = ctx.get(&owner);
-            let validator = ctx.get(&validator);
             // Find owner's delegations to the given validator
-            let bond_id = pos::BondId { source, validator };
+            let bond_id = pos::BondId { source: owner, validator };
             let bond_key = pos::bond_key(&bond_id);
             let bonds =
                 query_storage_value::<pos::Bonds>(client.clone(), bond_key)
@@ -245,41 +240,20 @@ pub async fn query_bonds(ctx: Context, args: args::QueryBonds) {
                     .await
                     .unwrap_or_default();
 
-            let stdout = io::stdout();
-            let mut w = stdout.lock();
-
             if let Some(bonds) = &bonds {
-                let bond_type = if bond_id.source == bond_id.validator {
-                    "Self-bonds"
-                } else {
-                    "Delegations"
-                };
-                writeln!(w, "{}:", bond_type).unwrap();
+                // FIXME: should return a struct
                 process_bonds_query(
                     bonds, &slashes, &epoch, None, None, None, &mut w,
                 );
             }
 
             if let Some(unbonds) = &unbonds {
-                let bond_type = if bond_id.source == bond_id.validator {
-                    "Unbonded self-bonds"
-                } else {
-                    "Unbonded delegations"
-                };
-                writeln!(w, "{}:", bond_type).unwrap();
                 process_unbonds_query(
                     unbonds, &slashes, &epoch, None, None, None, &mut w,
                 );
             }
 
             if bonds.is_none() && unbonds.is_none() {
-                writeln!(
-                    w,
-                    "No delegations found for {} to validator {}",
-                    bond_id.source,
-                    bond_id.validator.encode()
-                )
-                .unwrap();
             }
         }
         (None, Some(validator)) => {
@@ -752,32 +726,31 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx(ledger_address: &TendermintAddress, tx_bytes: Vec<u8>) {
-    let client = HttpClient::new(ledger_address.clone()).unwrap();
+pub async fn dry_run_tx<T>(client: T, tx_bytes: Vec<u8>) -> AbciQuery
+where T: Client {
     let path = Path::DryRunTx;
-    let response = client
+    client
         .abci_query(Some(path.into()), tx_bytes, None, false)
         .await
-        .unwrap();
-    println!("{:#?}", response);
+        .unwrap() //FIXME: unwrap?
 }
 
 /// Get account's public key stored in its storage sub-space
-pub async fn get_public_key(
+pub async fn get_public_key<T>(
+    client: T,
     address: &Address,
-    ledger_address: TendermintAddress,
-) -> Option<ed25519::PublicKey> {
-    let client = HttpClient::new(ledger_address).unwrap();
+) -> Option<ed25519::PublicKey>
+where T: Client {
     let key = ed25519::pk_key(address);
     query_storage_value(client, key).await
 }
 
 /// Check if the given address is a known validator.
-pub async fn is_validator(
+pub async fn is_validator<T>(
+    client: T,
     address: &Address,
-    ledger_address: TendermintAddress,
-) -> bool {
-    let client = HttpClient::new(ledger_address).unwrap();
+) -> bool
+where T: Client {
     // Check if there's any validator state
     let key = pos::validator_state_key(address);
     // We do not need to decode it
@@ -790,11 +763,11 @@ pub async fn is_validator(
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
-pub async fn known_address(
+pub async fn known_address<T>(
+    client: T,
     address: &Address,
-    ledger_address: TendermintAddress,
-) -> bool {
-    let client = HttpClient::new(ledger_address).unwrap();
+) -> bool
+where T: Client {
     match address {
         Address::Established(_) => {
             // Established account exists if it has a VP
@@ -805,6 +778,7 @@ pub async fn known_address(
     }
 }
 
+// TODO: restart from here
 /// Accumulate slashes starting from `epoch_start` until (optionally)
 /// `withdraw_epoch` and apply them to the token amount `delta`.
 fn apply_slashes(

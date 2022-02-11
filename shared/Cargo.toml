@@ -33,11 +33,15 @@ ibc-vp-abci = [
 # for integration tests and test utilies
 ABCI = [
   "tendermint-stable",
+  "tendermint-config-abci",
   "tendermint-proto-abci",
+  "tendermint-rpc-abci",
 ]
 ABCI-plus-plus = [
   "tendermint",
+  "tendermint-config",
   "tendermint-proto",
+  "tendermint-rpc",
 ]
 testing = [
   "proptest",

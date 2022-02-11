@@ -21,15 +21,16 @@ pub async fn find_keypair(
     addr: &Address,
     ledger_address: TendermintAddress,
 ) -> Rc<Keypair> {
+    let client = HttpClient::new(ledger_address).unwrap();
     match addr {
         Address::Established(_) => {
             println!(
                 "Looking-up public key of {} from the ledger...",
                 addr.encode()
             );
-            let public_key = rpc::get_public_key(addr, ledger_address)
-                .await
-                .unwrap_or_else(|| {
+            let public_key = rpc::get_public_key(client.clone(), addr)
+                .await;
+            public_key.unwrap_or_else(|| {
                     eprintln!(
                         "No public key found for the address {}",
                         addr.encode()

@@ -68,12 +68,13 @@ pub async fn submit_custom(ctx: Context, args: args::TxCustom) {
 
 pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     let addr = ctx.get(&args.addr);
+    let client = HttpClient::new(args.tx.ledger_address).unwrap();
 
     // Check that the address is established and exists on chain
     match &addr {
         Address::Established(_) => {
             let exists =
-                rpc::known_address(&addr, args.tx.ledger_address.clone()).await;
+                rpc::known_address(client.clone(), &addr).await;
             if !exists {
                 eprintln!("The address {} doesn't exist on chain.", addr);
                 if !args.tx.force {
@@ -243,6 +244,8 @@ pub async fn submit_init_validator(
 
     let (mut ctx, initialized_accounts) =
         process_tx(ctx, &tx_args, tx, &keypair).await;
+
+    let client = HttpClient::new(tx_args.ledger_address).unwrap();
     if !tx_args.dry_run {
         let (validator_address_alias, validator_address, rewards_address_alias) =
             match &initialized_accounts[..] {
@@ -251,12 +254,11 @@ pub async fn submit_init_validator(
                 [account_1, account_2] => {
                     // We need to find out which address is which
                     let (validator_address, rewards_address) =
-                        if rpc::is_validator(account_1, tx_args.ledger_address)
+                        match rpc::is_validator(client.clone(), account_1)
                             .await
                         {
-                            (account_1, account_2)
-                        } else {
-                            (account_2, account_1)
+                            true => (account_1, account_2),
+                            false => (account_2, account_1)
                         };
 
                     let validator_address_alias = match tx_args
@@ -347,9 +349,10 @@ pub async fn submit_init_validator(
 
 pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let source = ctx.get(&args.source);
+    let client = HttpClient::new(args.tx.ledger_address).unwrap();
     // Check that the source address exists on chain
     let source_exists =
-        rpc::known_address(&source, args.tx.ledger_address.clone()).await;
+        rpc::known_address(client.clone(), &source).await;
     if !source_exists {
         eprintln!("The source address {} doesn't exist on chain.", source);
         if !args.tx.force {
@@ -359,7 +362,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let target = ctx.get(&args.target);
     // Check that the target address exists on chain
     let target_exists =
-        rpc::known_address(&target, args.tx.ledger_address.clone()).await;
+        rpc::known_address(client.clone(), &target).await;
     if !target_exists {
         eprintln!("The target address {} doesn't exist on chain.", target);
         if !args.tx.force {
@@ -369,7 +372,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let token = ctx.get(&args.token);
     // Check that the token address exists on chain
     let token_exists =
-        rpc::known_address(&token, args.tx.ledger_address.clone()).await;
+        rpc::known_address(client.clone(), &token).await;
     if !token_exists {
         eprintln!("The token address {} doesn't exist on chain.", token);
         if !args.tx.force {
@@ -378,7 +381,6 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     }
     // Check source balance
     let balance_key = token::balance_key(&token, &source);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     match rpc::query_storage_value::<token::Amount>(client, balance_key).await {
         Some(balance) => {
             if balance < args.amount {
@@ -423,9 +425,9 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
 
 pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let validator = ctx.get(&args.validator);
+    let client = HttpClient::new(args.tx.ledger_address).unwrap();
     // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    let is_validator = rpc::is_validator(client.clone(), &validator).await;
     if !is_validator {
         eprintln!(
             "The address {} doesn't belong to any known validator account.",
@@ -439,7 +441,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // Check that the source address exists on chain
     if let Some(source) = &source {
         let source_exists =
-            rpc::known_address(source, args.tx.ledger_address.clone()).await;
+            rpc::known_address(client.clone(), source).await;
         if !source_exists {
             eprintln!("The source address {} doesn't exist on chain.", source);
             if !args.tx.force {
@@ -451,8 +453,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // balance
     let bond_source = source.as_ref().unwrap_or(&validator);
     let balance_key = token::balance_key(&address::xan(), bond_source);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    match rpc::query_storage_value::<token::Amount>(client, balance_key).await {
+    match rpc::query_storage_value::<token::Amount>(client.clone(), balance_key).await {
         Some(balance) => {
             if balance < args.amount {
                 eprintln!(
@@ -490,9 +491,9 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
 
 pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let validator = ctx.get(&args.validator);
+    let client = HttpClient::new(args.tx.ledger_address).unwrap();
     // Check that the validator address exists on chain
-    let is_validator =
-        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+    let is_validator = rpc::is_validator(client.clone(), &validator).await;
     if !is_validator {
         eprintln!(
             "The address {} doesn't belong to any known validator account.",
@@ -513,7 +514,6 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
         validator: validator.clone(),
     };
     let bond_key = ledger::pos::bond_key(&bond_id);
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
     let bonds =
         rpc::query_storage_value::<Bonds>(client.clone(), bond_key).await;
     match bonds {
@@ -559,8 +559,8 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
 }
 
 pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
-    let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-    let epoch = match rpc::query_epoch(&client).await {
+    let client = HttpClient::new(args.tx.ledger_address).unwrap();
+    match rpc::query_epoch(client.clone()).await {
         Ok(v) => {
             println!("Last committed epoch: {}", v);
             v
@@ -574,7 +574,7 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let validator = ctx.get(&args.validator);
     // Check that the validator address exists on chain
     let is_validator =
-        rpc::is_validator(&validator, args.tx.ledger_address.clone()).await;
+        rpc::is_validator(client.clone(), &validator).await;
     if !is_validator {
         eprintln!(
             "The address {} doesn't belong to any known validator account.",
@@ -683,13 +683,14 @@ async fn process_tx(
     // let request_body = request.into_json();
     // println!("HTTP request body: {}", request_body);
 
+    let client = HttpClient::new(args.ledger_address.clone()).unwrap();
+
     if args.dry_run {
-        rpc::dry_run_tx(&args.ledger_address, tx.to_bytes()).await;
+        let response = rpc::dry_run_tx(client, tx.to_bytes()).await;
+        println!("{:#?}", response);
         (ctx, vec![])
     } else {
-        let client = HttpClient::new(args.tx.ledger_address.clone()).unwrap();
-
-        let epoch = match rpc::query_epoch(&client).await {
+        let epoch = match rpc::query_epoch(client).await {
             Ok(v) => {
                 println!("Last committed epoch: {}", v);
                 v
