@@ -5,7 +5,7 @@
 //!
 //! Any other storage key changes are allowed only with a valid signature.
 
-use anoma_vp_prelude::key::{SignedTxData, ToRef};
+use anoma_vp_prelude::key::SignedTxData;
 use anoma_vp_prelude::*;
 use once_cell::unsync::Lazy;
 

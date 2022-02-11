@@ -15,7 +15,7 @@
 use anoma_vp_prelude::intent::{
     Exchange, FungibleTokenIntent, IntentTransfers,
 };
-use anoma_vp_prelude::key::{Signed, SignedTxData, ToRef};
+use anoma_vp_prelude::key::{Signed, SignedTxData};
 use anoma_vp_prelude::*;
 use once_cell::unsync::Lazy;
 use rust_decimal::prelude::*;
