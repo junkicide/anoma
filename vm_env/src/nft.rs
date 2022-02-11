@@ -75,15 +75,15 @@ pub mod tx {
             );
             tx::write(&optional_value_key.to_string(), &token.opt_values);
 
-            // write burnt propriety
-            let burnt_key =
-                nft::get_token_burnt_key(nft_address, &token.id.to_string());
-            tx::write(&burnt_key.to_string(), token.burnt);
-
             // write approval addresses
             let approval_key =
                 nft::get_token_approval_key(nft_address, &token.id.to_string());
             tx::write(&approval_key.to_string(), &token.approvals);
+
+            // write burnt propriety
+            let burnt_key =
+                nft::get_token_burnt_key(nft_address, &token.id.to_string());
+            tx::write(&burnt_key.to_string(), token.burnt);
         }
         tx::insert_verifier(verifier);
     }
@@ -154,7 +154,7 @@ pub mod vp {
         let approvals_key =
             get_token_approval_key(nft_address, nft_token_id).to_string();
         let approval_addresses: Vec<Address> =
-            vp::read_pre(approvals_key).unwrap();
+            vp::read_pre(approvals_key).unwrap_or_default();
         return approval_addresses
             .iter()
             .any(|addr| verifiers.contains(addr));

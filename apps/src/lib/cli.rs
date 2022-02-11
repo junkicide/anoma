@@ -1008,7 +1008,7 @@ pub mod cmds {
     pub struct TxNftCreate(pub args::NftCreate);
 
     impl SubCmd for TxNftCreate {
-        const CMD: &'static str = "nft-create";
+        const CMD: &'static str = "nft-init";
 
         fn parse(matches: &ArgMatches) -> Option<Self>
         where
@@ -1030,7 +1030,7 @@ pub mod cmds {
     pub struct TxNftMint(pub args::NftMint);
 
     impl SubCmd for TxNftMint {
-        const CMD: &'static str = "nft-mint";
+        const CMD: &'static str = "mint-nft";
 
         fn parse(matches: &ArgMatches) -> Option<Self>
         where

@@ -11,6 +11,7 @@ wasms += tx_init_validator
 wasms += tx_from_intent
 wasms += tx_transfer
 wasms += tx_create_nft
+wasms += tx_mint_nft_tokens
 wasms += tx_unbond
 wasms += tx_update_vp
 wasms += tx_withdraw

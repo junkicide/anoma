@@ -51,8 +51,8 @@ const TX_INIT_ACCOUNT_WASM: &str = "tx_init_account.wasm";
 const TX_INIT_VALIDATOR_WASM: &str = "tx_init_validator.wasm";
 const TX_UPDATE_VP_WASM: &str = "tx_update_vp.wasm";
 const TX_TRANSFER_WASM: &str = "tx_transfer.wasm";
-const TX_CREATE_NFT: &str = "wasm/tx_create_nft.wasm";
-const TX_MINT_NFT_TOKEN: &str = "wasm/tx_mint_nft_tokens.wasm";
+const TX_CREATE_NFT: &str = "tx_create_nft.wasm";
+const TX_MINT_NFT_TOKEN: &str = "tx_mint_nft_tokens.wasm";
 const VP_USER_WASM: &str = "vp_user.wasm";
 const TX_BOND_WASM: &str = "tx_bond.wasm";
 const TX_UNBOND_WASM: &str = "tx_unbond.wasm";
@@ -438,6 +438,8 @@ pub async fn submit_create_nft(ctx: Context, args: args::NftCreate) {
         None => ctx.read_wasm(VP_NFT),
     };
 
+    let signer = Some(WalletAddress::new(nft.creator.clone().to_string()));
+
     let data = CreateNft {
         tag: nft.tag.to_string(),
         creator: nft.creator,
@@ -451,12 +453,11 @@ pub async fn submit_create_nft(ctx: Context, args: args::NftCreate) {
         "Encoding transfer data to initialize a new account shouldn't fail",
     );
 
-    let tx_code = std::fs::read(TX_CREATE_NFT)
-        .expect("Expected a file at given code path");
+    let tx_code = ctx.read_wasm(TX_CREATE_NFT);
 
     let tx = Tx::new(tx_code, Some(data));
 
-    let (ctx, tx, keypair) = sign_tx(ctx, tx, &args.tx, None).await;
+    let (ctx, tx, keypair) = sign_tx(ctx, tx, &args.tx, signer.as_ref()).await;
 
     process_tx(ctx, &args.tx, tx, &keypair).await;
 }
@@ -481,6 +482,8 @@ pub async fn submit_mint_nft(ctx: Context, args: args::NftMint) {
         }
     };
 
+    let signer = Some(WalletAddress::new(nft_creator_address.to_string()));
+
     let data = MintNft {
         address: args.nft_address,
         creator: nft_creator_address,
@@ -491,12 +494,11 @@ pub async fn submit_mint_nft(ctx: Context, args: args::NftMint) {
         "Encoding transfer data to initialize a new account shouldn't fail",
     );
 
-    let tx_code = std::fs::read(TX_MINT_NFT_TOKEN)
-        .expect("Expected a file at given code path");
+    let tx_code = ctx.read_wasm(TX_MINT_NFT_TOKEN);
 
     let tx = Tx::new(tx_code, Some(data));
 
-    let (ctx, tx, keypair) = sign_tx(ctx, tx, &args.tx, None).await;
+    let (ctx, tx, keypair) = sign_tx(ctx, tx, &args.tx, signer.as_ref()).await;
 
     process_tx(ctx, &args.tx, tx, &keypair).await;
 }
