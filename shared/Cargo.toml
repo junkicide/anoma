@@ -67,7 +67,6 @@ chrono = "0.4.19"
 # Using unreleased commit on top of version 0.5.0 that adds Sync to the CLruCache
 clru = {git = "https://github.com/marmeladema/clru-rs.git", rev = "71ca566"}
 derivative = "2.2.0"
-ed25519-dalek = {version = "1.0.1", default-features = false, features = ["rand", "u64_backend", "serde"]}
 ed25519-consensus = "1.2.0"
 libsecp256k1 = "0.7.0"
 hex = "0.4.3"
@@ -86,7 +85,6 @@ proptest = {version = "1.0.0", optional = true}
 prost = "0.9.0"
 prost-types = "0.9.0"
 pwasm-utils = {version = "0.18.0", optional = true}
-# TODO the older versions of rand and rand_core are currently required to avoid mismatching version issue (https://github.com/dalek-cryptography/ed25519-dalek/pull/159)
 rand = {version = "0.8", optional = true}
 # TODO proptest rexports the RngCore trait but the re-implementations only work for version `0.8`. *sigh*
 rand_core = {version = "0.6", optional = true}

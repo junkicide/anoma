@@ -14,6 +14,10 @@ use super::{
     ParsePublicKeyError, ToRef, VerifySigError, SchemeType, ParseSecretKeyError, ParseSignatureError, SigScheme as SigSchemeTrait
 };
 
+const PUBLIC_KEY_LENGTH: usize = 32;
+const SECRET_KEY_LENGTH: usize = 32;
+const SIGNATURE_LENGTH: usize = 64;
+
 /// Ed25519 public key
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct PublicKey(pub ed25519_consensus::VerificationKey);
@@ -37,7 +41,7 @@ impl super::PublicKey for PublicKey {
 
 impl BorshDeserialize for PublicKey {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        Ok(PublicKey(ed25519_consensus::VerificationKey::try_from(<[u8; ed25519_dalek::PUBLIC_KEY_LENGTH] as BorshDeserialize>::deserialize(buf)?.as_ref()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?))
+        Ok(PublicKey(ed25519_consensus::VerificationKey::try_from(<[u8; PUBLIC_KEY_LENGTH] as BorshDeserialize>::deserialize(buf)?.as_ref()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?))
     }
 }
 
@@ -126,7 +130,7 @@ impl Clone for SecretKey {
 
 impl BorshDeserialize for SecretKey {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        Ok(SecretKey(ed25519_consensus::SigningKey::try_from(<[u8; ed25519_dalek::SECRET_KEY_LENGTH] as BorshDeserialize>::deserialize(buf)?.as_ref()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?))
+        Ok(SecretKey(ed25519_consensus::SigningKey::try_from(<[u8; SECRET_KEY_LENGTH] as BorshDeserialize>::deserialize(buf)?.as_ref()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?))
     }
 }
 
@@ -175,7 +179,7 @@ impl super::Signature for Signature {
 
 impl BorshDeserialize for Signature {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        Ok(Signature(ed25519_consensus::Signature::try_from(<[u8; ed25519_dalek::SIGNATURE_LENGTH] as BorshDeserialize>::deserialize(buf)?.as_ref()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?))
+        Ok(Signature(ed25519_consensus::Signature::try_from(<[u8; SIGNATURE_LENGTH] as BorshDeserialize>::deserialize(buf)?.as_ref()).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?))
     }
 }
 
