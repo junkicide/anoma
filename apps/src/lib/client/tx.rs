@@ -382,27 +382,33 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     // Check source balance
     let balance_key = token::balance_key(&token, &source);
     match rpc::query_storage_value::<token::Amount>(client, balance_key).await {
-        Some(balance) => {
-            if balance < args.amount {
+        Ok(v) => match v {
+            Some(balance) => {
+                if balance < args.amount {
+                    eprintln!(
+                        "The balance of the source {} of token {} is lower than \
+                        the amount to be transferred. Amount to transfer is {} \
+                        and the balance is {}.",
+                        source, token, args.amount, balance
+                    );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+            }
+            None => {
                 eprintln!(
-                    "The balance of the source {} of token {} is lower than \
-                     the amount to be transferred. Amount to transfer is {} \
-                     and the balance is {}.",
-                    source, token, args.amount, balance
+                    "No balance found for the source {} of token {}",
+                    source, token
                 );
                 if !args.tx.force {
                     safe_exit(1)
                 }
             }
-        }
-        None => {
-            eprintln!(
-                "No balance found for the source {} of token {}",
-                source, token
-            );
-            if !args.tx.force {
-                safe_exit(1)
-            }
+        },
+        Err(e) => {
+            eprintln!(e);
+            safe_exit(1)
         }
     }
     let tx_code = ctx.read_wasm(TX_TRANSFER_WASM);
@@ -454,24 +460,33 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let bond_source = source.as_ref().unwrap_or(&validator);
     let balance_key = token::balance_key(&address::xan(), bond_source);
     match rpc::query_storage_value::<token::Amount>(client.clone(), balance_key).await {
-        Some(balance) => {
-            if balance < args.amount {
-                eprintln!(
-                    "The balance of the source {} is lower than the amount to \
+        Ok(v) => match v {
+            Some(balance) => {
+                if balance < args.amount {
+                    eprintln!(
+                        "The balance of the source {} is lower than the amount to \
                      be transferred. Amount to transfer is {} and the balance \
                      is {}.",
                     bond_source, args.amount, balance
+                    );
+                    if !args.tx.force {
+                        safe_exit(1)
+                    }
+                }
+            }
+            None => {
+                eprintln!(
+                    "No balance found for the source {}",
+                    bond_source
                 );
                 if !args.tx.force {
                     safe_exit(1)
                 }
             }
-        }
-        None => {
-            eprintln!("No balance found for the source {}", bond_source);
-            if !args.tx.force {
-                safe_exit(1)
-            }
+        },
+        Err(e) => {
+            eprintln!(e);
+            safe_exit(1)
         }
     }
     let tx_code = ctx.read_wasm(TX_BOND_WASM);
@@ -517,6 +532,7 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let bonds =
         rpc::query_storage_value::<Bonds>(client.clone(), bond_key).await;
     match bonds {
+        Ok(v) => match v{
         Some(bonds) => {
             let mut bond_amount: token::Amount = 0.into();
             for bond in bonds.iter() {
@@ -542,6 +558,11 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
                 safe_exit(1)
             }
         }
+    },
+    Err(e) => {
+        eprintln!(e);
+        safe_exit(1)
+    }
     }
 
     let data = pos::Unbond {
@@ -597,7 +618,8 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let bond_key = ledger::pos::unbond_key(&bond_id);
     let unbonds =
         rpc::query_storage_value::<Unbonds>(client.clone(), bond_key).await;
-    match unbonds {
+        match unbonds {
+            Ok(v) => match v {
         Some(unbonds) => {
             let mut unbonded_amount: token::Amount = 0.into();
             if let Some(unbond) = unbonds.get(epoch) {
@@ -622,6 +644,11 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
                 safe_exit(1)
             }
         }
+    },
+    Err(e) => {
+        eprintln!(e);
+        safe_exit(1)
+    }
     }
 
     let data = pos::Withdraw { validator, source };

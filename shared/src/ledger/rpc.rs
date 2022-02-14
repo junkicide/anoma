@@ -4,15 +4,17 @@
 // TODO: Factor out the code's side-effects to allow to query storage data with
 // any client that impl tendermint_rpc::client::Client and return the typed
 // values (e.g. Result<pos::Bonds, QueryError>      -> Replace all mentions to
-// HttpClient with impl tendermint_rpc::client::Client      -> Do the same also
-// for SubscriptionClient? TODO: move error and stdout prints to app folder
-// (where these functions are actually called) TODO: testing?
+// HttpClient with impl tendermint_rpc::client::Client   
+// TODO: move error and stdout prints to app folder (where these functions are actually called) 
+// TODO: testing?
 // TODO: return Results instead of printing
-// TODO: remove cli::safe_exit() and move them where the functions are called
-// TODO: remove unwraps ?
 // TODO: fix all TODOs and FIXMEs left around also in other files
 // TODO: improve docs
-// TODO: move all structs to types dir?
+// TODO: move all structs to types dir? Implements some traits on them?
+// TODO: check if turbofish operators sill work
+// TODO: generic letter for client should be C for all methods in this module
+// TODO: what to do with unwraps and expect on abci_query? If you leave them document the panics
+// TODO: check what actually needs to be public
 
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -58,21 +60,39 @@ use crate::types::address::Address;
 use crate::types::key::ed25519;
 use crate::types::rpc::{Path, PrefixValue, TxEventQuery, TxResponse};
 use crate::types::token::Amount;
-use crate::types::storage::Epoch;
+use crate::types::storage::{Epoch, Key};
 use crate::types::{address, storage, token};
 
-// TODO: create custom error, QueryError
+
 #[derive(Error)]
 pub enum QueryError {
-    #[error("Error decoding the epoch value: {0}")]
-    Decoding(#[from] TError),
+    #[error("Error decoding the value: {0}")]
+    Decoding(#[from] TError), //FIXME: TError or Error?
     #[error("Error in the query {0} (error code {1})")]
     Format(String, u32),
+    #[error("Unable to find a block applying the given transaction")]
+    BlockNotFound,
+    #[error("Unable to find the event corresponding to the specified transaction")]
+    EventNotFound,
+    #[error("Unexpected storage key {0}")]
+    NoBondKey(Key)
+}
+
+pub enum TxQueryResult {
+    Accepted(TxResponse),
+    Applied(TxResponse),
+}
+
+pub struct BondQueryResult {
+    bonds: Amount,
+    active: Amount,
+    unbonds: Amount,
+    withdrawable: Amount
 }
 
 /// Represents the result of a balance query. First Address is the Owner one,
 /// nested Address is the token one.
-pub struct BalanceQueryResult(HashMap<Address, HashMap<Address, Amount>>);
+pub struct BalanceQueryResult(HashMap<Address, HashMap<Address, Amount>>); //FIXME: Or HashMap<(Adress, Address), Amount> ?
 
 impl BalanceQueryResult {
     fn new() -> Self {
@@ -151,7 +171,7 @@ pub async fn query_balance<T>(
     client: T,
     token: Option<&Address>,
     owner: Option<&Address>,
-) -> BalanceQueryResult
+) -> Result<BalanceQueryResult, QueryError>
 where T: Client {
     let tokens = address::tokens();
     let result = BalanceQueryResult::new();
@@ -164,7 +184,7 @@ where T: Client {
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
 
             if let Some(balance) =
-                query_storage_value::<token::Amount>(client, key).await
+                query_storage_value::<Amount>(client, key).await?
             {
                 result.insert(owner.to_owned(), token.to_owned(), balance);
             }
@@ -173,8 +193,8 @@ where T: Client {
             for (token, currency_code) in tokens {
                 let key = token::balance_key(&token, owner);
                 if let Some(balance) =
-                    query_storage_value::<token::Amount>(client.clone(), key)
-                        .await
+                    query_storage_value::<Amount>(client.clone(), key)
+                        .await?
                 {
                     result.insert(owner.to_owned(), token, balance);
                 }
@@ -183,7 +203,7 @@ where T: Client {
         (Some(token), None) => {
             let key = token::balance_prefix(token);
             if let Some(balances) =
-                query_storage_prefix::<token::Amount>(client, key).await
+                query_storage_prefix::<Amount>(client, key).await?
             {
                 let currency_code = tokens
                     .get(token)
@@ -199,8 +219,8 @@ where T: Client {
             for (token, currency_code) in tokens {
                 let key = token::balance_prefix(&token);
                 if let Some(balances) =
-                    query_storage_prefix::<token::Amount>(client.clone(), key)
-                        .await
+                    query_storage_prefix::<Amount>(client.clone(), key)
+                        .await?
                 {
                     for (key, balance) in balances {
                         let owner =
@@ -211,14 +231,16 @@ where T: Client {
             }
         }
     }
-    result
+    Ok(result)
 }
 
 /// Query PoS bond(s)
-/// FIXME: should Address be a generic?
-pub async fn query_bonds<T>(client: T, owner: Option<&Address>, validator: Option<&Address>) ->  //FIXME: fix return value
-where T: Client {
+pub async fn query_bonds<C>(client: C, owner: Option<&Address>, validator: Option<&Address>) -> Result<BondQueryResult, QueryError>
+where C: Client {
+    // FIXME: refactor, function too long (export to different supfunctions and/or try to share code between match cases)
+    // FIXME: should return Bonds?
     let epoch = query_epoch(client).await?;
+    let mut result: BondQueryResult; // TODO: initialize to 0 all fields
     match (owner, validator) {
         (Some(owner), Some(validator)) => {
             // Find owner's delegations to the given validator
@@ -226,38 +248,37 @@ where T: Client {
             let bond_key = pos::bond_key(&bond_id);
             let bonds =
                 query_storage_value::<pos::Bonds>(client.clone(), bond_key)
-                    .await;
+                    .await?;
             // Find owner's unbonded delegations from the given
             // validator
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
                 query_storage_value::<pos::Unbonds>(client.clone(), unbond_key)
-                    .await;
+                    .await?;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
                 query_storage_value::<pos::Slashes>(client, slashes_key)
-                    .await
+                    .await?
                     .unwrap_or_default();
 
             if let Some(bonds) = &bonds {
-                // FIXME: should return a struct
-                process_bonds_query(
-                    bonds, &slashes, &epoch, None, None, None, &mut w,
+                let (t, a) = process_bonds_query(
+                    bonds, &slashes, epoch, None, None, None,
                 );
+                result.bonds = t;
+                result.active = a;
             }
 
             if let Some(unbonds) = &unbonds {
-                process_unbonds_query(
-                    unbonds, &slashes, &epoch, None, None, None, &mut w,
+                let (t, w) = process_unbonds_query(
+                    unbonds, &slashes, epoch, None, None, None,
                 );
-            }
-
-            if bonds.is_none() && unbonds.is_none() {
+                result.unbonds = t;
+                result.withdrawable = w;
             }
         }
         (None, Some(validator)) => {
-            let validator = ctx.get(&validator);
             // Find validator's self-bonds
             let bond_id = pos::BondId {
                 source: validator.clone(),
@@ -266,65 +287,51 @@ where T: Client {
             let bond_key = pos::bond_key(&bond_id);
             let bonds =
                 query_storage_value::<pos::Bonds>(client.clone(), bond_key)
-                    .await;
+                    .await?;
             // Find validator's unbonded self-bonds
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
                 query_storage_value::<pos::Unbonds>(client.clone(), unbond_key)
-                    .await;
+                    .await?;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
                 query_storage_value::<pos::Slashes>(client, slashes_key)
-                    .await
+                    .await?
                     .unwrap_or_default();
 
-            let stdout = io::stdout();
-            let mut w = stdout.lock();
-
             if let Some(bonds) = &bonds {
-                writeln!(w, "Self-bonds:").unwrap();
-                process_bonds_query(
-                    bonds, &slashes, &epoch, None, None, None, &mut w,
+                let (t, a) = process_bonds_query(
+                    bonds, &slashes, epoch, None, None, None,
                 );
+                result.bonds = t;
+                result.active = a;
             }
 
             if let Some(unbonds) = &unbonds {
-                writeln!(w, "Unbonded self-bonds:").unwrap();
-                process_unbonds_query(
-                    unbonds, &slashes, &epoch, None, None, None, &mut w,
+                let (t, w) = process_unbonds_query(
+                    unbonds, &slashes, epoch, None, None, None,
                 );
-            }
-
-            if bonds.is_none() && unbonds.is_none() {
-                writeln!(
-                    w,
-                    "No self-bonds found for validator {}",
-                    bond_id.validator.encode()
-                )
-                .unwrap();
+                result.unbonds = t;
+                result.withdrawable = w;
             }
         }
         (Some(owner), None) => {
-            let owner = ctx.get(&owner);
             // Find owner's bonds to any validator
             let bonds_prefix = pos::bonds_for_source_prefix(&owner);
             let bonds = query_storage_prefix::<pos::Bonds>(
                 client.clone(),
                 bonds_prefix,
             )
-            .await;
+            .await?;
             // Find owner's unbonds to any validator
             let unbonds_prefix = pos::unbonds_for_source_prefix(&owner);
             let unbonds = query_storage_prefix::<pos::Unbonds>(
                 client.clone(),
                 unbonds_prefix,
             )
-            .await;
+            .await?;
 
-            let mut total: token::Amount = 0.into();
-            let mut total_active: token::Amount = 0.into();
-            let mut any_bonds = false;
             if let Some(bonds) = bonds {
                 for (key, bonds) in bonds {
                     match pos::is_bond_key(&key) {
@@ -336,46 +343,27 @@ where T: Client {
                                 client.clone(),
                                 slashes_key,
                             )
-                            .await
+                            .await?
                             .unwrap_or_default();
 
-                            let stdout = io::stdout();
-                            let mut w = stdout.lock();
-                            any_bonds = true;
-                            let bond_type: Cow<str> = if source == validator {
-                                "Self-bonds".into()
-                            } else {
-                                format!(
-                                    "Delegations from {} to {}",
-                                    source, validator
-                                )
-                                .into()
-                            };
-                            writeln!(w, "{}:", bond_type).unwrap();
                             let (tot, tot_active) = process_bonds_query(
                                 &bonds,
                                 &slashes,
-                                &epoch,
+                                epoch,
                                 Some(&source),
-                                Some(total),
-                                Some(total_active),
-                                &mut w,
+                                Some(result.bonds),
+                                Some(result.active),
                             );
-                            total = tot;
-                            total_active = tot_active;
+                            result.bonds = tot;
+                            result.active = tot_active;
                         }
                         None => {
-                            panic!("Unexpected storage key {}", key)
+                            return QueryError::NoBondKey(key);
                         }
                     }
                 }
             }
-            if total_active != 0.into() && total_active != total {
-                println!("Active bonds total: {}", total_active);
-            }
 
-            let mut total: token::Amount = 0.into();
-            let mut total_withdrawable: token::Amount = 0.into();
             if let Some(unbonds) = unbonds {
                 for (key, unbonds) in unbonds {
                     match pos::is_unbond_key(&key) {
@@ -387,43 +375,25 @@ where T: Client {
                                 client.clone(),
                                 slashes_key,
                             )
-                            .await
+                            .await?
                             .unwrap_or_default();
 
-                            let stdout = io::stdout();
-                            let mut w = stdout.lock();
-                            any_bonds = true;
-                            let bond_type: Cow<str> = if source == validator {
-                                "Unbonded self-bonds".into()
-                            } else {
-                                format!("Unbonded delegations from {}", source)
-                                    .into()
-                            };
-                            writeln!(w, "{}:", bond_type).unwrap();
                             let (tot, tot_withdrawable) = process_unbonds_query(
                                 &unbonds,
                                 &slashes,
-                                &epoch,
+                                epoch,
                                 Some(&source),
-                                Some(total),
-                                Some(total_withdrawable),
-                                &mut w,
+                                Some(result.unbonds),
+                                Some(result.withdrawable),
                             );
-                            total = tot;
-                            total_withdrawable = tot_withdrawable;
+                            result.unbonds = tot;
+                            result.withdrawable = tot_withdrawable;
                         }
                         None => {
-                            panic!("Unexpected storage key {}", key)
+                            return QueryError::NoBondKey(key);
                         }
                     }
                 }
-            }
-            if total_withdrawable != 0.into() {
-                println!("Withdrawable total: {}", total_withdrawable);
-            }
-
-            if !any_bonds {
-                println!("No self-bonds or delegations found for {}", owner);
             }
         }
         (None, None) => {
@@ -433,17 +403,15 @@ where T: Client {
                 client.clone(),
                 bonds_prefix,
             )
-            .await;
+            .await?;
             // Find all the unbonds
             let unbonds_prefix = pos::unbonds_prefix();
             let unbonds = query_storage_prefix::<pos::Unbonds>(
                 client.clone(),
                 unbonds_prefix,
             )
-            .await;
+            .await?;
 
-            let mut total: token::Amount = 0.into();
-            let mut total_active: token::Amount = 0.into();
             if let Some(bonds) = bonds {
                 for (key, bonds) in bonds {
                     match pos::is_bond_key(&key) {
@@ -455,46 +423,27 @@ where T: Client {
                                 client.clone(),
                                 slashes_key,
                             )
-                            .await
+                            .await?
                             .unwrap_or_default();
 
-                            let stdout = io::stdout();
-                            let mut w = stdout.lock();
-                            let bond_type = if source == validator {
-                                format!("Self-bonds for {}", validator.encode())
-                            } else {
-                                format!(
-                                    "Delegations from {} to validator {}",
-                                    source,
-                                    validator.encode()
-                                )
-                            };
-                            writeln!(w, "{}:", bond_type).unwrap();
                             let (tot, tot_active) = process_bonds_query(
                                 &bonds,
                                 &slashes,
-                                &epoch,
+                                epoch,
                                 Some(&source),
-                                Some(total),
-                                Some(total_active),
-                                &mut w,
+                                Some(result.bonds),
+                                Some(result.active),
                             );
-                            total = tot;
-                            total_active = tot_active;
+                            result.bonds = tot;
+                            result.active = tot_active;
                         }
                         None => {
-                            panic!("Unexpected storage key {}", key)
+                            return QueryError::NoBondKey(key);
                         }
                     }
                 }
             }
-            if total_active != 0.into() && total_active != total {
-                println!("Bond total active: {}", total_active);
-            }
-            println!("Bond total: {}", total);
 
-            let mut total: token::Amount = 0.into();
-            let mut total_withdrawable: token::Amount = 0.into();
             if let Some(unbonds) = unbonds {
                 for (key, unbonds) in unbonds {
                     match pos::is_unbond_key(&key) {
@@ -506,53 +455,33 @@ where T: Client {
                                 client.clone(),
                                 slashes_key,
                             )
-                            .await
+                            .await?
                             .unwrap_or_default();
 
-                            let stdout = io::stdout();
-                            let mut w = stdout.lock();
-                            let bond_type = if source == validator {
-                                format!(
-                                    "Unbonded self-bonds for {}",
-                                    validator.encode()
-                                )
-                            } else {
-                                format!(
-                                    "Unbonded delegations from {} to \
-                                     validator {}",
-                                    source,
-                                    validator.encode()
-                                )
-                            };
-                            writeln!(w, "{}:", bond_type).unwrap();
                             let (tot, tot_withdrawable) = process_unbonds_query(
                                 &unbonds,
                                 &slashes,
-                                &epoch,
+                                epoch,
                                 Some(&source),
-                                Some(total),
-                                Some(total_withdrawable),
-                                &mut w,
+                                Some(result.unbonds),
+                                Some(result.withdrawable),
                             );
-                            total = tot;
-                            total_withdrawable = tot_withdrawable;
+                            result.unbonds = tot;
+                            result.withdrawable = tot_withdrawable;
                         }
                         None => {
-                            panic!("Unexpected storage key {}", key)
+                            return QueryError::NoBondKey(key);
                         }
                     }
                 }
             }
-            if total_withdrawable != 0.into() {
-                println!("Withdrawable total: {}", total_withdrawable);
-            }
-            println!("Unbonded total: {}", total);
         }
     }
+    Ok(result)
 }
 
 /// Query PoS voting power
-pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
+pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) { //TODO: restart from here
     let epoch = match args.epoch {
         Some(epoch) => epoch,
         None => query_epoch(args.query.clone()).await,
@@ -565,7 +494,7 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
         client.clone(),
         validator_set_key,
     )
-    .await
+    .await?
     .expect("Validator set should always be set");
     let validator_set = validator_sets
         .get(epoch)
@@ -580,7 +509,7 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
                     client.clone(),
                     voting_power_key,
                 )
-                .await;
+                .await?;
             match voting_powers.and_then(|data| data.get(epoch)) {
                 Some(voting_power_delta) => {
                     let voting_power: VotingPower =
@@ -643,7 +572,7 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
         client,
         total_voting_power_key,
     )
-    .await
+    .await?
     .expect("Total voting power should always be set");
     let total_voting_power = total_voting_powers
         .get(epoch)
@@ -652,7 +581,7 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) {
 }
 
 /// Query PoS slashes
-pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
+pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) { //FIXME: must return result. Caller of this method should print error and safe_exit on Err
     let client = HttpClient::new(args.query.ledger_address).unwrap();
     match args.validator {
         Some(validator) => {
@@ -663,7 +592,7 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
                 client.clone(),
                 slashes_key,
             )
-            .await;
+            .await?;
             match slashes {
                 Some(slashes) => {
                     let stdout = io::stdout();
@@ -689,7 +618,7 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) {
                 client.clone(),
                 slashes_prefix,
             )
-            .await;
+            .await?;
 
             match slashes {
                 Some(slashes) => {
@@ -736,121 +665,95 @@ where T: Client {
 }
 
 /// Get account's public key stored in its storage sub-space
-pub async fn get_public_key<T>(
+pub async fn get_public_key<T>( //FIXME: fix calls to this method to manage di Error
     client: T,
     address: &Address,
-) -> Option<ed25519::PublicKey>
+) -> Result<Option<ed25519::PublicKey>, QueryError>
 where T: Client {
     let key = ed25519::pk_key(address);
-    query_storage_value(client, key).await
+    query_storage_value(client, key).await?
 }
 
 /// Check if the given address is a known validator.
-pub async fn is_validator<T>(
+pub async fn is_validator<T>( //FIXME: fix calls to this method to manage di Error
     client: T,
     address: &Address,
-) -> bool
+) -> Result<bool, QueryError>
 where T: Client {
     // Check if there's any validator state
     let key = pos::validator_state_key(address);
     // We do not need to decode it
     let state: Option<pos::ValidatorStates> =
-        query_storage_value(client, key).await;
+        query_storage_value(client, key).await?;
     // If there is, then the address is a validator
-    state.is_some()
+    Ok(state.is_some())
 }
 
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
-pub async fn known_address<T>(
-    client: T,
+pub async fn known_address<C>( //FIXME: fix calls to this method to manage di Error
+    client: C,
     address: &Address,
-) -> bool
-where T: Client {
+) -> Result<bool, QueryError>
+where C: Client {
     match address {
         Address::Established(_) => {
             // Established account exists if it has a VP
-            let key = storage::Key::validity_predicate(address);
-            query_has_storage_key(client, key).await
+            let key = Key::validity_predicate(address);
+            query_has_storage_key(client, key).await?
         }
-        Address::Implicit(_) | Address::Internal(_) => true,
+        Address::Implicit(_) | Address::Internal(_) => Ok(true),
     }
 }
 
-// TODO: restart from here
 /// Accumulate slashes starting from `epoch_start` until (optionally)
 /// `withdraw_epoch` and apply them to the token amount `delta`.
 fn apply_slashes(
     slashes: &[Slash],
-    mut delta: token::Amount,
+    mut delta: Amount,
     epoch_start: PosEpoch,
     withdraw_epoch: Option<PosEpoch>,
-    w: &mut std::io::StdoutLock,
-) -> token::Amount {
-    let mut slashed = token::Amount::default();
+) -> Amount {
     for slash in slashes {
         if slash.epoch >= epoch_start
             && slash.epoch < withdraw_epoch.unwrap_or_else(|| u64::MAX.into())
         {
-            writeln!(
-                w,
-                "    ⚠ Slash: {} from epoch {}",
-                slash.rate, slash.epoch
-            )
-            .unwrap();
             let raw_delta: u64 = delta.into();
-            let current_slashed = token::Amount::from(slash.rate * raw_delta);
-            slashed += current_slashed;
+            let current_slashed = Amount::from(slash.rate * raw_delta);
             delta -= current_slashed;
         }
     }
-    if slashed != 0.into() {
-        writeln!(w, "    ⚠ Slash total: {}", slashed).unwrap();
-        writeln!(w, "    ⚠ After slashing: Δ {}", delta).unwrap();
-    }
+
     delta
 }
 
-/// Process the result of a blonds query to determine total bonds
+/// Process the result of a bonds query to determine total bonds
 /// and total active bonds. This includes taking into account
 /// an aggregation of slashes since the start of the given epoch.
 fn process_bonds_query(
     bonds: &Bonds,
     slashes: &[Slash],
-    epoch: &Epoch,
+    epoch: Epoch,
     source: Option<&Address>,
-    total: Option<token::Amount>,
-    total_active: Option<token::Amount>,
-    w: &mut std::io::StdoutLock,
-) -> (token::Amount, token::Amount) {
+    total: Option<Amount>,
+    total_active: Option<Amount>,
+) -> (Amount, Amount) {
     let mut total_active = total_active.unwrap_or_else(|| 0.into());
-    let mut current_total: token::Amount = 0.into();
+    let mut current_total: Amount = 0.into();
+
     for bond in bonds.iter() {
         for (epoch_start, &(mut delta)) in bond.deltas.iter().sorted() {
-            writeln!(w, "  Active from epoch {}: Δ {}", epoch_start, delta)
-                .unwrap();
-            delta = apply_slashes(slashes, delta, *epoch_start, None, w);
+            delta = apply_slashes(slashes, delta, *epoch_start, None);
             current_total += delta;
-            let epoch_start: Epoch = (*epoch_start).into();
-            if epoch >= &epoch_start {
+
+            if epoch >= epoch_start {
                 total_active += delta;
             }
         }
     }
     let total = total.unwrap_or_else(|| 0.into()) + current_total;
-    match source {
-        Some(addr) => {
-            writeln!(w, "  Bonded total from {}: {}", addr, current_total)
-                .unwrap();
-        }
-        None => {
-            if total_active != 0.into() && total_active != total {
-                writeln!(w, "Active bonds total: {}", total_active).unwrap();
-            }
-            writeln!(w, "Bonds total: {}", total).unwrap();
-        }
-    }
+
     (total, total_active)
 }
 
@@ -861,62 +764,44 @@ fn process_bonds_query(
 fn process_unbonds_query(
     unbonds: &Unbonds,
     slashes: &[Slash],
-    epoch: &Epoch,
+    epoch: Epoch,
     source: Option<&Address>,
-    total: Option<token::Amount>,
-    total_withdrawable: Option<token::Amount>,
-    w: &mut std::io::StdoutLock,
-) -> (token::Amount, token::Amount) {
+    total: Option<Amount>,
+    total_withdrawable: Option<Amount>,
+) -> (Amount, Amount) {
     let mut withdrawable = total_withdrawable.unwrap_or_else(|| 0.into());
-    let mut current_total: token::Amount = 0.into();
+    let mut current_total: Amount = 0.into();
+
     for deltas in unbonds.iter() {
         for ((epoch_start, epoch_end), &(mut delta)) in
             deltas.deltas.iter().sorted()
         {
             let withdraw_epoch = *epoch_end + 1_u64;
-            writeln!(
-                w,
-                "  Withdrawable from epoch {} (active from {}): Δ {}",
-                withdraw_epoch, epoch_start, delta
-            )
-            .unwrap();
             delta = apply_slashes(
                 slashes,
                 delta,
                 *epoch_start,
                 Some(withdraw_epoch),
-                w,
             );
             current_total += delta;
-            let epoch_end: Epoch = (*epoch_end).into();
-            if epoch > &epoch_end {
+            if epoch > epoch_end {
                 withdrawable += delta;
             }
         }
     }
     let total = total.unwrap_or_else(|| 0.into()) + current_total;
-    match source {
-        Some(addr) => {
-            writeln!(w, "  Unbonded total from {}: {}", addr, current_total)
-                .unwrap();
-        }
-        None => {
-            if withdrawable != 0.into() {
-                writeln!(w, "Withdrawable total: {}", withdrawable).unwrap();
-            }
-            writeln!(w, "Unbonded total: {}", total).unwrap();
-        }
-    }
+
     (total, withdrawable)
 }
 
 /// Query a storage value and decode it with [`BorshDeserialize`].
-pub async fn query_storage_value<T>(
-    client: HttpClient,
-    key: storage::Key,
-) -> Option<T>
+pub async fn query_storage_value<C, T>(
+    client: C,
+    key: Key,
+) -> Result<Option<T>, QueryError>
 where
-    T: BorshDeserialize,
+    C: Client,
+    T: BorshDeserialize, 
 {
     let path = Path::Value(key);
     let data = vec![];
@@ -926,31 +811,24 @@ where
         .unwrap();
     match response.code {
         Code::Ok => match T::try_from_slice(&response.value[..]) {
-            Ok(value) => return Some(value),
-            Err(err) => eprintln!("Error decoding the value: {}", err),
+            Ok(value) => Ok(Some(value)),
+            Err(err) => Err(QueryError::Decoding(err))
         },
-        Code::Err(err) => {
-            if err == 1 {
-                return None;
-            } else {
-                eprintln!(
-                    "Error in the query {} (error code {})",
-                    response.info, err
-                )
-            }
-        }
+        Code::Err(err) if err == 1 => Ok(None),
+        Code::Err(err) => Err(QueryError::Format(response.info, err)) 
     }
-    cli::safe_exit(1)
 }
 
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-pub async fn query_storage_prefix<T>(
-    client: HttpClient,
-    key: storage::Key,
-) -> Option<impl Iterator<Item = (storage::Key, T)>>
+pub async fn query_storage_prefix<C, K, T>(
+    client: C,
+    key: Key,
+) -> Result<Option<K>, QueryError>
 where
+    C: Client,
+    K: Iterator<Item = (Key, T)>,
     T: BorshDeserialize,
 {
     let path = Path::Prefix(key);
@@ -965,41 +843,27 @@ where
                 Ok(values) => {
                     let decode = |PrefixValue { key, value }: PrefixValue| {
                         match T::try_from_slice(&value[..]) {
-                            Err(err) => {
-                                eprintln!(
-                                    "Skipping a value for key {}. Error in \
-                                     decoding: {}",
-                                    key, err
-                                );
-                                None
-                            }
+                            Err(_) => None,
                             Ok(value) => Some((key, value)),
                         }
                     };
-                    return Some(values.into_iter().filter_map(decode));
+                    Some(values.into_iter().filter_map(decode))
                 }
-                Err(err) => eprintln!("Error decoding the values: {}", err),
+                Err(err) => Err(QueryError::Decoding(err)),
             }
         }
-        Code::Err(err) => {
-            if err == 1 {
-                return None;
-            } else {
-                eprintln!(
-                    "Error in the query {} (error code {})",
-                    response.info, err
-                )
-            }
-        }
+        Code::Err(err) if err == 1 => Ok(None),
+        Code::Err(err) =>  Err(QueryError::Format(response.info, err))
     }
-    cli::safe_exit(1)
 }
 
 /// Query to check if the given storage key exists.
-pub async fn query_has_storage_key(
-    client: HttpClient,
-    key: storage::Key,
-) -> bool {
+
+pub async fn query_has_storage_key<C>(
+    client: C,
+    key: Key,
+) -> Result<bool, QueryError> 
+where C: Client{
     let path = Path::HasKey(key);
     let data = vec![];
     let response = client
@@ -1008,43 +872,32 @@ pub async fn query_has_storage_key(
         .unwrap();
     match response.code {
         Code::Ok => match bool::try_from_slice(&response.value[..]) {
-            Ok(value) => return value,
-            Err(err) => eprintln!("Error decoding the value: {}", err),
+            Ok(value) => Ok(value),
+            Err(err) => Err(QueryError::Decoding(err)),
         },
-        Code::Err(err) => {
-            eprintln!(
-                "Error in the query {} (error code {})",
-                response.info, err
-            )
-        }
+        Code::Err(err) => Err(QueryError::Format(response.info, err))
     }
-    cli::safe_exit(1)
 }
 
 /// Lookup the full response accompanying the specified transaction event
 
-pub async fn query_tx_response(
-    ledger_address: &TendermintAddress,
+pub async fn query_tx_respons<C>(
+    client: C,
     tx_query: TxEventQuery,
-) -> Result<TxResponse, TError> {
-    // Connect to the Tendermint server holding the transactions
-    let (client, driver) = WebSocketClient::new(ledger_address.clone()).await?;
-    let driver_handle = tokio::spawn(async move { driver.run().await });
+) -> Result<TxResponse, QueryError>
+where C: Client {
     // Find all blocks that apply a transaction with the specified hash
-    let blocks = &client
+    let blocks = client
         .block_search(Query::from(tx_query.clone()), 1, 255, Order::Ascending)
         .await
         .expect("Unable to query for transaction with given hash")
         .blocks;
     // Get the block results corresponding to a block to which
     // the specified transaction belongs
-    let block = &blocks
+    let block = blocks
         .get(0)
         .ok_or_else(|| {
-            TError::server(
-                "Unable to find a block applying the given transaction"
-                    .to_string(),
-            )
+            QueryError::BlockNotFound
         })?
         .block;
     let response_block_results = client
@@ -1067,11 +920,7 @@ pub async fn query_tx_response(
                 .cloned()
         });
     let query_event = query_event_opt.ok_or_else(|| {
-        TError::server(
-            "Unable to find the event corresponding to the specified \
-             transaction"
-                .to_string(),
-        )
+        QueryError::EventNotFound
     })?;
     // Reformat the event attributes so as to ease value extraction
     let event_map: HashMap<&str, &str> = (&query_event.attributes)
@@ -1090,51 +939,32 @@ pub async fn query_tx_response(
         )
         .unwrap_or_default(),
     };
-    // Signal to the driver to terminate.
-    client.close()?;
-    // Await the driver's termination to ensure proper connection closure.
-    let _ = driver_handle.await.unwrap_or_else(|x| {
-        eprintln!("{}", x);
-        cli::safe_exit(1)
-    });
+
     Ok(result)
 }
 
 /// Lookup the results of applying the specified transaction to the
 /// blockchain.
 
-pub async fn query_result(_ctx: Context, args: args::QueryResult) {
+pub async fn query_tx_result<C>(client: C, tx_hash: T) -> Result<TxQueryResult, QueryError>
+where C: Client, T: Into<String> {
     // First try looking up application event pertaining to given hash.
     let tx_response = query_tx_response(
-        &args.query.ledger_address,
-        TxEventQuery::Applied(args.tx_hash.clone()),
+        client.clone(),
+        TxEventQuery::Applied(tx_hash.into().clone()),
     )
     .await;
+
     match tx_response {
-        Ok(result) => {
-            println!(
-                "Transaction was applied with result: {}",
-                serde_json::to_string_pretty(&result).unwrap()
-            )
-        }
-        Err(err1) => {
+        Ok(tx_response) => Ok(TxQueryResult::Applied(tx_response)),
+        Err(_) => {
             // If this fails then instead look for an acceptance event.
             let tx_response = query_tx_response(
-                &args.query.ledger_address,
-                TxEventQuery::Accepted(args.tx_hash),
+                client,
+                TxEventQuery::Accepted(tx_hash.into()),
             )
-            .await;
-            match tx_response {
-                Ok(result) => println!(
-                    "Transaction was accepted with result: {}",
-                    serde_json::to_string_pretty(&result).unwrap()
-                ),
-                Err(err2) => {
-                    // Print the errors that caused the lookups to fail
-                    eprintln!("{}\n{}", err1, err2);
-                    cli::safe_exit(1)
-                }
-            }
+            .await?;
+            Ok(TxQueryResult::Accepted(tx_response))
         }
     }
 }
