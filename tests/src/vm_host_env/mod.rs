@@ -401,7 +401,7 @@ mod tests {
         // Write the public key to storage
         let pk_key = key::pk_key(&addr);
         let keypair = key::testing::keypair_1();
-        let pk = keypair.to_ref().clone();
+        let pk = keypair.ref_to().clone();
         env.storage
             .write(&pk_key, pk.try_to_vec().unwrap())
             .unwrap();
@@ -429,7 +429,7 @@ mod tests {
 
             let other_keypair = key::testing::keypair_2();
             assert!(!vp_host_env::verify_tx_signature(
-                &other_keypair.to_ref(),
+                &other_keypair.ref_to(),
                 &signed_tx_data.sig
             ));
         }

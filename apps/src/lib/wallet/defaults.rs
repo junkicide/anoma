@@ -121,7 +121,7 @@ mod dev {
     /// An implicit user address for testing & development
     pub fn daewon_address() -> Address {
         // "atest1d9khqw36xprrzdpk89rrws69g4z5vd6pgv65gvjrgeqnv3pcg4zns335xymry335gcerqs3etd0xfa"
-        (&daewon_keypair().to_ref()).into()
+        (&daewon_keypair().ref_to()).into()
     }
 
     /// An established validator address for testing & development

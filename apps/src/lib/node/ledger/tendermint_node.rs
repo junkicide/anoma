@@ -220,7 +220,7 @@ pub fn reset(tendermint_dir: impl AsRef<Path>) -> Result<()> {
 fn validator_key_to_json<SK: SecretKey>(address: &Address, sk: &SK) -> std::result::Result<serde_json::Value, ParseSecretKeyError> {
     let address = address.raw_hash().unwrap();
     ed25519c::SecretKey::try_from_sk(sk).map(|sk| {
-        let pk: ed25519c::PublicKey = sk.to_ref();
+        let pk: ed25519c::PublicKey = sk.ref_to();
         let ck_arr =
             [sk.try_to_vec().unwrap(),
              pk.try_to_vec().unwrap()].concat();
@@ -236,7 +236,7 @@ fn validator_key_to_json<SK: SecretKey>(address: &Address, sk: &SK) -> std::resu
             }
         })
     }).or_else(|_err| { secp256k1::SecretKey::try_from_sk(sk).map(|sk| {
-        let pk: secp256k1::PublicKey = sk.to_ref();
+        let pk: secp256k1::PublicKey = sk.ref_to();
         let ck_arr =
             [sk.try_to_vec().unwrap(),
              pk.try_to_vec().unwrap()].concat();

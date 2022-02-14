@@ -91,10 +91,10 @@ pub enum ParseSecretKeyError {
 
 /// A value-to-value conversion that consumes the input value.
 
-pub trait ToRef<T>
+pub trait RefTo<T>
 {
     /// Performs the conversion.
-    fn to_ref(&self) -> T;
+    fn ref_to(&self) -> T;
 }
 
 /// Simple and safe type conversions that may fail in a controlled
@@ -180,7 +180,7 @@ pub trait SecretKey : BorshSerialize
     + BorshDeserialize
     + Display
     + Debug
-    + ToRef<Self::PublicKey>
+    + RefTo<Self::PublicKey>
     + FromStr<Err = ParseSecretKeyError>
     + Clone
     + Sync

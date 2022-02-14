@@ -197,7 +197,7 @@ pub mod wrapper_tx {
             let inner_tx = EncryptedTx::encrypt(&tx.to_bytes(), pubkey);
             Self {
                 fee,
-                pk: keypair.to_ref(),
+                pk: keypair.ref_to(),
                 epoch,
                 gas_limit,
                 inner_tx,
@@ -241,7 +241,7 @@ pub mod wrapper_tx {
 
         /// Sign the wrapper transaction and convert to a normal Tx type
         pub fn sign(&self, keypair: &common::SecretKey) -> Result<Tx, WrapperTxErr> {
-            if self.pk != keypair.to_ref() {
+            if self.pk != keypair.ref_to() {
                 return Err(WrapperTxErr::InvalidKeyPair);
             }
             Ok(Tx::new(
@@ -451,7 +451,7 @@ pub mod wrapper_tx {
             tx.data = Some(signed_tx_data.try_to_vec().expect("Test failed"));
 
             // check that the signature is not valid
-            tx.verify_sig::<common::SigScheme>(&keypair.to_ref(), &signed_tx_data.sig)
+            tx.verify_sig::<common::SigScheme>(&keypair.ref_to(), &signed_tx_data.sig)
                 .expect_err("Test failed");
             // check that the try from method also fails
             let err = crate::types::transaction::process_tx(tx)

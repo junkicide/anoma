@@ -1,7 +1,7 @@
 //! Cryptographic keys
 
 use super::{ed25519c, secp256k1};
-use super::{ParsePublicKeyError, VerifySigError, SchemeType, ToRef, ParseSecretKeyError, ParseSignatureError, SigScheme as SigSchemeTrait};
+use super::{ParsePublicKeyError, VerifySigError, SchemeType, RefTo, ParseSecretKeyError, ParseSignatureError, SigScheme as SigSchemeTrait};
 use std::fmt::Display;
 #[cfg(feature = "rand")]
 use rand::{CryptoRng, RngCore};
@@ -84,11 +84,11 @@ impl super::SecretKey for SecretKey {
     }
 }
 
-impl ToRef<PublicKey> for SecretKey {
-    fn to_ref(&self) -> PublicKey {
+impl RefTo<PublicKey> for SecretKey {
+    fn ref_to(&self) -> PublicKey {
         match self {
-            SecretKey::Ed25519(sk) => PublicKey::Ed25519(sk.to_ref()),
-            SecretKey::Secp256k1(sk) => PublicKey::Secp256k1(sk.to_ref()),
+            SecretKey::Ed25519(sk) => PublicKey::Ed25519(sk.ref_to()),
+            SecretKey::Secp256k1(sk) => PublicKey::Secp256k1(sk.ref_to()),
         }
     }
 }

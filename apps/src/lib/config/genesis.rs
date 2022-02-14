@@ -617,10 +617,10 @@ pub fn genesis() -> Genesis {
             address,
             staking_reward_address,
             tokens: token::Amount::whole(200_000),
-            consensus_key: consensus_keypair.to_ref(),
-            staking_reward_key: staking_reward_keypair.to_ref(),
+            consensus_key: consensus_keypair.ref_to(),
+            staking_reward_key: staking_reward_keypair.ref_to(),
         },
-        account_key: account_keypair.to_ref(),
+        account_key: account_keypair.ref_to(),
         non_staked_balance: token::Amount::whole(100_000),
         // TODO replace with https://github.com/anoma/anoma/issues/25)
         validator_vp_code_path: vp_user_path.into(),
@@ -638,32 +638,32 @@ pub fn genesis() -> Genesis {
         address: wallet::defaults::albert_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::albert_keypair().to_ref()),
+        public_key: Some(wallet::defaults::albert_keypair().ref_to()),
         storage: HashMap::default(),
     };
     let bertha = EstablishedAccount {
         address: wallet::defaults::bertha_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::bertha_keypair().to_ref()),
+        public_key: Some(wallet::defaults::bertha_keypair().ref_to()),
         storage: HashMap::default(),
     };
     let christel = EstablishedAccount {
         address: wallet::defaults::christel_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::christel_keypair().to_ref()),
+        public_key: Some(wallet::defaults::christel_keypair().ref_to()),
         storage: HashMap::default(),
     };
     let matchmaker = EstablishedAccount {
         address: wallet::defaults::matchmaker_address(),
         vp_code_path: vp_user_path.into(),
         vp_sha256: Default::default(),
-        public_key: Some(wallet::defaults::matchmaker_keypair().to_ref()),
+        public_key: Some(wallet::defaults::matchmaker_keypair().ref_to()),
         storage: HashMap::default(),
     };
     let implicit_accounts = vec![ImplicitAccount {
-        public_key: wallet::defaults::daewon_keypair().to_ref(),
+        public_key: wallet::defaults::daewon_keypair().ref_to(),
     }];
     let default_user_tokens = token::Amount::whole(1_000_000);
     let default_key_tokens = token::Amount::whole(1_000);

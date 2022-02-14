@@ -176,7 +176,7 @@ pub async fn submit_init_validator(
         ctx.wallet
             .gen_key(Some(validator_key_alias.clone()), unsafe_dont_encrypt)
             .1
-            .to_ref()
+            .ref_to()
             .clone()
     });
 
@@ -194,7 +194,7 @@ pub async fn submit_init_validator(
             ctx.wallet
                 .gen_key(Some(rewards_key_alias.clone()), unsafe_dont_encrypt)
                 .1
-                .to_ref()
+                .ref_to()
                 .clone()
         });
 
@@ -231,7 +231,7 @@ pub async fn submit_init_validator(
 
     let data = InitValidator {
         account_key,
-        consensus_key: consensus_key.to_ref(),
+        consensus_key: consensus_key.ref_to(),
         rewards_account_key,
         validator_vp_code,
         rewards_vp_code,

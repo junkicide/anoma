@@ -256,12 +256,12 @@ impl ArgFromMutContext for common::PublicKey {
             FromStr::from_str(raw)
                 .map(|pkh: PublicKeyHash| {
                     let key = ctx.wallet.find_key_by_pkh(&pkh).unwrap();
-                    key.to_ref().clone()
+                    key.ref_to().clone()
                 })
                 // Or it can be an alias that may be found in the wallet
                 .unwrap_or_else(|_parse_err| {
                     let key = ctx.wallet.find_key(raw).unwrap();
-                    key.to_ref().clone()
+                    key.ref_to().clone()
                 })
         })
     }
