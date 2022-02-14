@@ -466,7 +466,7 @@ macro_rules! sigscheme_test {
             #[test]
             fn gen_keypair1() {
                 let secret_key = testing::gen_keypair::<$type>();
-                let public_key = secret_key.to_ref();
+                let public_key = secret_key.ref_to();
                 println!("Public key: {}", public_key);
                 println!("Secret key: {}", secret_key);
             }
