@@ -1,25 +1,17 @@
 //! Client RPC queries
-
-// TODO: remove Context and args from functions' parameters
-// TODO: Factor out the code's side-effects to allow to query storage data with
-// any client that impl tendermint_rpc::client::Client and return the typed
-// values (e.g. Result<pos::Bonds, QueryError>      -> Replace all mentions to
-// HttpClient with impl tendermint_rpc::client::Client   
-// TODO: move error and stdout prints to app folder (where these functions are actually called) 
+ 
 // TODO: testing?
-// TODO: return Results instead of printing
 // TODO: fix all TODOs and FIXMEs left around also in other files
 // TODO: improve docs
-// TODO: move all structs to types dir? Implements some traits on them?
-// TODO: check if turbofish operators sill work
-// TODO: generic letter for client should be C for all methods in this module
-// TODO: what to do with unwraps and expect on abci_query? If you leave them document the panics
-// TODO: check what actually needs to be public
+// TODO: move public structs to types dir and private ones here. Implements some traits on the public ones?
+// TODO: remove unused imports
+// TODO: format code
 
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::io::{self, Write};
+use std::marker::Sync;
+use std::clone::Clone;
 
 use borsh::BorshDeserialize;
 use itertools::Itertools;
@@ -54,20 +46,23 @@ use crate::ledger::pos::types::{
     Epoch as PosEpoch, VotingPower, WeightedValidator,
 };
 use crate::ledger::pos::{
-    self, is_validator_slashes_key, Bonds, Slash, Unbonds,
+    self, Bonds, Slash, Unbonds,
 };
 use crate::types::address::Address;
 use crate::types::key::ed25519;
-use crate::types::rpc::{Path, PrefixValue, TxEventQuery, TxResponse};
+use crate::types::rpc::{Path, PrefixValue, TxResponse};
 use crate::types::token::Amount;
 use crate::types::storage::{Epoch, Key};
 use crate::types::{address, storage, token};
 
 
-#[derive(Error)]
+// FIXME: add causing Errors to this ones? Or implement from
+#[derive(Debug, Error)]
 pub enum QueryError {
+    #[error("Abci query failed")]
+    ABCIQueryError,
     #[error("Error decoding the value: {0}")]
-    Decoding(#[from] TError), //FIXME: TError or Error?
+    Decoding(#[from] std::io::Error),
     #[error("Error in the query {0} (error code {1})")]
     Format(String, u32),
     #[error("Unable to find a block applying the given transaction")]
@@ -75,7 +70,55 @@ pub enum QueryError {
     #[error("Unable to find the event corresponding to the specified transaction")]
     EventNotFound,
     #[error("Unexpected storage key {0}")]
-    NoBondKey(Key)
+    NoBondKey(Key),
+    #[error("Validator set should be always set in the current epoch")]
+    UnsetValidator, //FIXME: move into a VotingPOwerError?
+    #[error("The sum voting power deltas shouldn't be negative")]
+    NegativeVotingPowerDeltas, //FIXME: move into a VotingPOwerError?
+    #[error("Total voting power should always be set")]
+    UnsetVotingPower, //FIXME: move into a VotingPOwerError?
+    #[error("Unable to query for transaction with given hash")]
+    TransactionNotFound
+}
+
+/// Represents a query for an event pertaining to the specified transaction
+#[derive(Debug, Clone)]
+enum TxEventQuery {
+    Accepted(String),
+    Applied(String),
+}
+
+impl TxEventQuery {
+    /// The event type to which this event query pertains
+    fn event_type(&self) -> &'static str {
+        match self {
+            TxEventQuery::Accepted(_tx_hash) => "accepted",
+            TxEventQuery::Applied(_tx_hash) => "applied",
+        }
+    }
+
+    /// The transaction to which this event query pertains
+    fn tx_hash(&self) -> &String {
+        match self {
+            TxEventQuery::Accepted(tx_hash) => tx_hash,
+            TxEventQuery::Applied(tx_hash) => tx_hash,
+        }
+    }
+}
+
+/// Transaction event queries are semantically a subset of general queries
+
+impl From<TxEventQuery> for Query {
+    fn from(tx_query: TxEventQuery) -> Self {
+        match tx_query {
+            TxEventQuery::Accepted(tx_hash) => {
+                Query::default().and_eq("accepted.hash", tx_hash)
+            }
+            TxEventQuery::Applied(tx_hash) => {
+                Query::default().and_eq("applied.hash", tx_hash)
+            }
+        }
+    }
 }
 
 pub enum TxQueryResult {
@@ -83,12 +126,14 @@ pub enum TxQueryResult {
     Applied(TxResponse),
 }
 
-pub struct BondQueryResult {
+pub struct BondQueryResult { //FIXME: improve this struct
     bonds: Amount,
     active: Amount,
     unbonds: Amount,
     withdrawable: Amount
 }
+
+pub struct SlashQueryResult(HashMap<Address, Vec<Slash>>); // TODO: implement getter for this
 
 /// Represents the result of a balance query. First Address is the Owner one,
 /// nested Address is the token one.
@@ -126,32 +171,23 @@ impl BalanceQueryResult {
     }
 }
 
+pub type Result<T> = std::result::Result<T, QueryError>;
+
 
 /// Query the epoch of the last committed block.
-pub async fn query_epoch<T>(client: T) -> Result<Epoch, QueryError>
-where T: Client {
+pub async fn query_epoch<C>(client: C) -> Result<Epoch>
+where C: Client + Sync {
     let path = Path::Epoch;
     let data = vec![];
     let response = client
         .abci_query(Some(path.into()), data, None, false)
         .await
-        .unwrap();
+        .map_err(|_| QueryError::ABCIQueryError)?;
 
     match response.code {
         Code::Ok => Ok(Epoch::try_from_slice(&response.value[..])?),
         Code::Err(err) => Err(QueryError::Format(response.info, err)),
     }
-    // match response.code { //FIXME: remove if it works
-    //     Code::Ok => match Epoch::try_from_slice(&response.value[..]) {
-    //         Ok(epoch) => {
-    //             Ok(epoch)
-    //         },
-    //         Err(err) => {
-    //             Err(QueryError::Decoding(err))
-    //         }
-    //     },
-    //     Code::Err(err) => Err(QueryError::Format(response.info, err))
-    // }
 }
 
 /// Query token balance(s)
@@ -167,12 +203,12 @@ where T: Client {
 /// 
 /// FIXME: this forces the caller to actually perform two calls: one to this
 ///     function and one on the struct returned to get the actual Amount
-pub async fn query_balance<T>(
-    client: T,
+pub async fn query_balance<C>(
+    client: C,
     token: Option<&Address>,
     owner: Option<&Address>,
-) -> Result<BalanceQueryResult, QueryError>
-where T: Client {
+) -> Result<BalanceQueryResult>
+where C: Client + Clone + Sync {
     let tokens = address::tokens();
     let result = BalanceQueryResult::new();
     match (token, owner) {
@@ -184,7 +220,7 @@ where T: Client {
                 .unwrap_or_else(|| Cow::Owned(token.to_string()));
 
             if let Some(balance) =
-                query_storage_value::<Amount>(client, key).await?
+                query_storage_value::<C, Amount>(client, key).await?
             {
                 result.insert(owner.to_owned(), token.to_owned(), balance);
             }
@@ -193,7 +229,7 @@ where T: Client {
             for (token, currency_code) in tokens {
                 let key = token::balance_key(&token, owner);
                 if let Some(balance) =
-                    query_storage_value::<Amount>(client.clone(), key)
+                    query_storage_value::<C, Amount>(client.clone(), key)
                         .await?
                 {
                     result.insert(owner.to_owned(), token, balance);
@@ -203,7 +239,7 @@ where T: Client {
         (Some(token), None) => {
             let key = token::balance_prefix(token);
             if let Some(balances) =
-                query_storage_prefix::<Amount>(client, key).await?
+                query_storage_prefix::<C, _, Amount>(client, key).await?
             {
                 let currency_code = tokens
                     .get(token)
@@ -219,7 +255,7 @@ where T: Client {
             for (token, currency_code) in tokens {
                 let key = token::balance_prefix(&token);
                 if let Some(balances) =
-                    query_storage_prefix::<Amount>(client.clone(), key)
+                    query_storage_prefix::<C, _, Amount>(client.clone(), key)
                         .await?
                 {
                     for (key, balance) in balances {
@@ -235,11 +271,11 @@ where T: Client {
 }
 
 /// Query PoS bond(s)
-pub async fn query_bonds<C>(client: C, owner: Option<&Address>, validator: Option<&Address>) -> Result<BondQueryResult, QueryError>
-where C: Client {
+pub async fn query_bonds<C>(client: C, owner: Option<Address>, validator: Option<Address>) -> Result<BondQueryResult> //FIXME: check calls to this function (no more references now)
+where C: Client + Clone + Sync  {
     // FIXME: refactor, function too long (export to different supfunctions and/or try to share code between match cases)
     // FIXME: should return Bonds?
-    let epoch = query_epoch(client).await?;
+    let epoch = query_epoch(client.clone()).await?;
     let mut result: BondQueryResult; // TODO: initialize to 0 all fields
     match (owner, validator) {
         (Some(owner), Some(validator)) => {
@@ -247,18 +283,18 @@ where C: Client {
             let bond_id = pos::BondId { source: owner, validator };
             let bond_key = pos::bond_key(&bond_id);
             let bonds =
-                query_storage_value::<pos::Bonds>(client.clone(), bond_key)
+                query_storage_value::<C, pos::Bonds>(client.clone(), bond_key)
                     .await?;
             // Find owner's unbonded delegations from the given
             // validator
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
-                query_storage_value::<pos::Unbonds>(client.clone(), unbond_key)
+                query_storage_value::<C, pos::Unbonds>(client.clone(), unbond_key)
                     .await?;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
-                query_storage_value::<pos::Slashes>(client, slashes_key)
+                query_storage_value::<C, pos::Slashes>(client, slashes_key)
                     .await?
                     .unwrap_or_default();
 
@@ -286,47 +322,47 @@ where C: Client {
             };
             let bond_key = pos::bond_key(&bond_id);
             let bonds =
-                query_storage_value::<pos::Bonds>(client.clone(), bond_key)
+                query_storage_value::<C, pos::Bonds>(client.clone(), bond_key)
                     .await?;
             // Find validator's unbonded self-bonds
             let unbond_key = pos::unbond_key(&bond_id);
             let unbonds =
-                query_storage_value::<pos::Unbonds>(client.clone(), unbond_key)
+                query_storage_value::<C, pos::Unbonds>(client.clone(), unbond_key)
                     .await?;
             // Find validator's slashes, if any
             let slashes_key = pos::validator_slashes_key(&bond_id.validator);
             let slashes =
-                query_storage_value::<pos::Slashes>(client, slashes_key)
+                query_storage_value::<C, pos::Slashes>(client, slashes_key)
                     .await?
                     .unwrap_or_default();
 
             if let Some(bonds) = &bonds {
-                let (t, a) = process_bonds_query(
+                let (b, a) = process_bonds_query(
                     bonds, &slashes, epoch, None, None, None,
                 );
-                result.bonds = t;
+                result.bonds = b;
                 result.active = a;
             }
 
             if let Some(unbonds) = &unbonds {
-                let (t, w) = process_unbonds_query(
+                let (u, w) = process_unbonds_query(
                     unbonds, &slashes, epoch, None, None, None,
                 );
-                result.unbonds = t;
+                result.unbonds = u;
                 result.withdrawable = w;
             }
         }
         (Some(owner), None) => {
             // Find owner's bonds to any validator
             let bonds_prefix = pos::bonds_for_source_prefix(&owner);
-            let bonds = query_storage_prefix::<pos::Bonds>(
+            let bonds = query_storage_prefix::<C, _, pos::Bonds>(
                 client.clone(),
                 bonds_prefix,
             )
             .await?;
             // Find owner's unbonds to any validator
             let unbonds_prefix = pos::unbonds_for_source_prefix(&owner);
-            let unbonds = query_storage_prefix::<pos::Unbonds>(
+            let unbonds = query_storage_prefix::<C, _, pos::Unbonds>(
                 client.clone(),
                 unbonds_prefix,
             )
@@ -339,7 +375,7 @@ where C: Client {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
+                            let slashes = query_storage_value::<C, pos::Slashes>(
                                 client.clone(),
                                 slashes_key,
                             )
@@ -358,7 +394,7 @@ where C: Client {
                             result.active = tot_active;
                         }
                         None => {
-                            return QueryError::NoBondKey(key);
+                            return Err(QueryError::NoBondKey(key));
                         }
                     }
                 }
@@ -371,7 +407,7 @@ where C: Client {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
+                            let slashes = query_storage_value::<C, pos::Slashes>(
                                 client.clone(),
                                 slashes_key,
                             )
@@ -390,7 +426,7 @@ where C: Client {
                             result.withdrawable = tot_withdrawable;
                         }
                         None => {
-                            return QueryError::NoBondKey(key);
+                            return Err(QueryError::NoBondKey(key));
                         }
                     }
                 }
@@ -399,14 +435,14 @@ where C: Client {
         (None, None) => {
             // Find all the bonds
             let bonds_prefix = pos::bonds_prefix();
-            let bonds = query_storage_prefix::<pos::Bonds>(
+            let bonds = query_storage_prefix::<C, _, pos::Bonds>(
                 client.clone(),
                 bonds_prefix,
             )
             .await?;
             // Find all the unbonds
             let unbonds_prefix = pos::unbonds_prefix();
-            let unbonds = query_storage_prefix::<pos::Unbonds>(
+            let unbonds = query_storage_prefix::<C, _, pos::Unbonds>(
                 client.clone(),
                 unbonds_prefix,
             )
@@ -419,7 +455,7 @@ where C: Client {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
+                            let slashes = query_storage_value::<C, pos::Slashes>(
                                 client.clone(),
                                 slashes_key,
                             )
@@ -438,7 +474,7 @@ where C: Client {
                             result.active = tot_active;
                         }
                         None => {
-                            return QueryError::NoBondKey(key);
+                            return Err(QueryError::NoBondKey(key));
                         }
                     }
                 }
@@ -451,7 +487,7 @@ where C: Client {
                             // Find validator's slashes, if any
                             let slashes_key =
                                 pos::validator_slashes_key(&validator);
-                            let slashes = query_storage_value::<pos::Slashes>(
+                            let slashes = query_storage_value::<C, pos::Slashes>(
                                 client.clone(),
                                 slashes_key,
                             )
@@ -470,7 +506,7 @@ where C: Client {
                             result.withdrawable = tot_withdrawable;
                         }
                         None => {
-                            return QueryError::NoBondKey(key);
+                            return Err(QueryError::NoBondKey(key));
                         }
                     }
                 }
@@ -481,31 +517,33 @@ where C: Client {
 }
 
 /// Query PoS voting power
-pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) { //TODO: restart from here
-    let epoch = match args.epoch {
+/// If validator is Some then returns the voting power of that specific address,
+/// otherwise returns the total voting power.
+pub async fn query_voting_power<C>(client: C, validator: Option<&Address>, epoch: Option<Epoch>) -> Result<Option<VotingPower>>
+where C: Client + Clone + Sync {
+    let epoch = match epoch {
         Some(epoch) => epoch,
-        None => query_epoch(args.query.clone()).await,
+        None => query_epoch(client.clone()).await?,
     };
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
 
     // Find the validator set
     let validator_set_key = pos::validator_set_key();
-    let validator_sets = query_storage_value::<pos::ValidatorSets>(
+    let validator_sets = query_storage_value::<C, pos::ValidatorSets>(
         client.clone(),
         validator_set_key,
     )
-    .await?
-    .expect("Validator set should always be set");
+    .await?;
     let validator_set = validator_sets
         .get(epoch)
-        .expect("Validator set should be always set in the current epoch");
-    match args.validator {
+        .ok_or()
+        .map_err(|_| QueryError::UnsetValidator)?;
+
+    match validator {
         Some(validator) => {
-            let validator = ctx.get(&validator);
             // Find voting power for the given validator
-            let voting_power_key = pos::validator_voting_power_key(&validator);
+            let voting_power_key = pos::validator_voting_power_key(validator);
             let voting_powers =
-                query_storage_value::<pos::ValidatorVotingPowers>(
+                query_storage_value::<C, pos::ValidatorVotingPowers>(
                     client.clone(),
                     voting_power_key,
                 )
@@ -513,108 +551,64 @@ pub async fn query_voting_power(ctx: Context, args: args::QueryVotingPower) { //
             match voting_powers.and_then(|data| data.get(epoch)) {
                 Some(voting_power_delta) => {
                     let voting_power: VotingPower =
-                        voting_power_delta.try_into().expect(
-                            "The sum voting power deltas shouldn't be negative",
-                        );
+                        voting_power_delta.try_into().map_err(|_| QueryError::NegativeVotingPowerDeltas)?;
                     let weighted = WeightedValidator {
-                        address: validator.clone(),
+                        address: validator.to_owned(),
                         voting_power,
                     };
-                    let is_active = validator_set.active.contains(&weighted);
-                    if !is_active {
-                        debug_assert!(
-                            validator_set.inactive.contains(&weighted)
-                        );
-                    }
-                    println!(
-                        "Validator {} is {}, voting power: {}",
-                        validator.encode(),
-                        if is_active { "active" } else { "inactive" },
-                        voting_power
-                    )
+                    Ok(Some(voting_power))
                 }
                 None => {
-                    println!("No voting power found for {}", validator.encode())
+                    Ok(None)
                 }
             }
         }
         None => {
-            // Iterate all validators
-            let stdout = io::stdout();
-            let mut w = stdout.lock();
+            let total_voting_power_key = pos::total_voting_power_key();
+            let total_voting_powers = query_storage_value::<C, pos::TotalVotingPowers>(
+                client,
+                total_voting_power_key,
+            )
+            .await?;
+            let total_voting_power = total_voting_powers
+                .get(epoch)
+                .ok_or()
+                .map_err(|_| QueryError::UnsetVotingPower)?;
 
-            writeln!(w, "Active validators:").unwrap();
-            for active in &validator_set.active {
-                writeln!(
-                    w,
-                    "  {}: {}",
-                    active.address.encode(),
-                    active.voting_power
-                )
-                .unwrap();
-            }
-            if !validator_set.inactive.is_empty() {
-                writeln!(w, "Inactive validators:").unwrap();
-                for inactive in &validator_set.inactive {
-                    writeln!(
-                        w,
-                        "  {}: {}",
-                        inactive.address.encode(),
-                        inactive.voting_power
-                    )
-                    .unwrap();
-                }
-            }
+            Ok(Some(total_voting_power))
         }
     }
-    let total_voting_power_key = pos::total_voting_power_key();
-    let total_voting_powers = query_storage_value::<pos::TotalVotingPowers>(
-        client,
-        total_voting_power_key,
-    )
-    .await?
-    .expect("Total voting power should always be set");
-    let total_voting_power = total_voting_powers
-        .get(epoch)
-        .expect("Total voting power should be always set in the current epoch");
-    println!("Total voting power: {}", total_voting_power);
 }
 
 /// Query PoS slashes
-pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) { //FIXME: must return result. Caller of this method should print error and safe_exit on Err
-    let client = HttpClient::new(args.query.ledger_address).unwrap();
-    match args.validator {
+/// If validator is Some then returns the slashes for it, otherwise returns
+/// the slashes for all the validators.
+pub async fn query_slashes<C>(client: C, validator: Option<&Address>) -> Result<Option<SlashQueryResult>>
+where C: Client + Clone + Sync {
+    let result: SlashQueryResult;
+    match validator {
         Some(validator) => {
-            let validator = ctx.get(&validator);
             // Find slashes for the given validator
-            let slashes_key = pos::validator_slashes_key(&validator);
-            let slashes = query_storage_value::<pos::Slashes>(
+            let slashes_key = pos::validator_slashes_key(validator);
+            let slashes = query_storage_value::<C, pos::Slashes>(
                 client.clone(),
                 slashes_key,
             )
             .await?;
-            match slashes {
+
+            match slashes { //FIXME: improve this
                 Some(slashes) => {
-                    let stdout = io::stdout();
-                    let mut w = stdout.lock();
-                    for slash in slashes {
-                        writeln!(
-                            w,
-                            "Slash epoch {}, rate {}, type {}",
-                            slash.epoch, slash.rate, slash.r#type
-                        )
-                        .unwrap();
-                    }
-                }
+                    result.insert(validator.to_owned(), slashes); //FIXME: is slashes a Vec<Slash>?
+                },
                 None => {
-                    println!("No slashes found for {}", validator.encode())
+                    return Ok(None);
                 }
             }
         }
         None => {
             // Iterate slashes for all validators
             let slashes_prefix = pos::slashes_prefix();
-            let slashes = query_storage_prefix::<pos::Slashes>(
+            let slashes = query_storage_prefix::<C, _, pos::Slashes>(
                 client.clone(),
                 slashes_prefix,
             )
@@ -622,64 +616,49 @@ pub async fn query_slashes(ctx: Context, args: args::QuerySlashes) { //FIXME: mu
 
             match slashes {
                 Some(slashes) => {
-                    let stdout = io::stdout();
-                    let mut w = stdout.lock();
                     for (slashes_key, slashes) in slashes {
                         if let Some(validator) =
-                            is_validator_slashes_key(&slashes_key)
+                            pos::is_validator_slashes_key(&slashes_key)
                         {
-                            for slash in slashes {
-                                writeln!(
-                                    w,
-                                    "Slash epoch {}, block height {}, rate \
-                                     {}, type {}, validator {}",
-                                    slash.epoch,
-                                    slash.block_height,
-                                    slash.rate,
-                                    slash.r#type,
-                                    validator,
-                                )
-                                .unwrap();
-                            }
-                        } else {
-                            eprintln!("Unexpected slashes key {}", slashes_key);
+                            result.insert(validator.to_owned(), slashes);  //FIXME: is slashes a Vec<Slash>?
                         }
                     }
                 }
                 None => {
-                    println!("No slashes found")
+                    return Ok(None);
                 }
             }
         }
     }
+    Ok(Some(result))
 }
 
 /// Dry run a transaction
-pub async fn dry_run_tx<T>(client: T, tx_bytes: Vec<u8>) -> AbciQuery
-where T: Client {
+pub async fn dry_run_tx<C>(client: C, tx_bytes: Vec<u8>) -> Result<AbciQuery>
+where C: Client + Sync {
     let path = Path::DryRunTx;
     client
         .abci_query(Some(path.into()), tx_bytes, None, false)
         .await
-        .unwrap() //FIXME: unwrap?
+        .map_err(|_| QueryError::ABCIQueryError)
 }
 
 /// Get account's public key stored in its storage sub-space
-pub async fn get_public_key<T>( //FIXME: fix calls to this method to manage di Error
-    client: T,
+pub async fn get_public_key<C>(
+    client: C,
     address: &Address,
-) -> Result<Option<ed25519::PublicKey>, QueryError>
-where T: Client {
+) -> Result<Option<ed25519::PublicKey>>
+where C: Client + Sync {
     let key = ed25519::pk_key(address);
-    query_storage_value(client, key).await?
+    query_storage_value(client, key).await
 }
 
 /// Check if the given address is a known validator.
-pub async fn is_validator<T>( //FIXME: fix calls to this method to manage di Error
-    client: T,
+pub async fn is_validator<C>(
+    client: C,
     address: &Address,
-) -> Result<bool, QueryError>
-where T: Client {
+) -> Result<bool>
+where C: Client + Sync {
     // Check if there's any validator state
     let key = pos::validator_state_key(address);
     // We do not need to decode it
@@ -692,16 +671,16 @@ where T: Client {
 /// Check if the address exists on chain. Established address exists if it has a
 /// stored validity predicate. Implicit and internal addresses always return
 /// true.
-pub async fn known_address<C>( //FIXME: fix calls to this method to manage di Error
+pub async fn known_address<C>(
     client: C,
     address: &Address,
-) -> Result<bool, QueryError>
-where C: Client {
+) -> Result<bool>
+where C: Client + Sync {
     match address {
         Address::Established(_) => {
             // Established account exists if it has a VP
             let key = Key::validity_predicate(address);
-            query_has_storage_key(client, key).await?
+            query_has_storage_key(client, key).await
         }
         Address::Implicit(_) | Address::Internal(_) => Ok(true),
     }
@@ -735,7 +714,6 @@ fn process_bonds_query(
     bonds: &Bonds,
     slashes: &[Slash],
     epoch: Epoch,
-    source: Option<&Address>,
     total: Option<Amount>,
     total_active: Option<Amount>,
 ) -> (Amount, Amount) {
@@ -747,7 +725,7 @@ fn process_bonds_query(
             delta = apply_slashes(slashes, delta, *epoch_start, None);
             current_total += delta;
 
-            if epoch >= epoch_start {
+            if epoch >= *epoch_start {
                 total_active += delta;
             }
         }
@@ -765,7 +743,6 @@ fn process_unbonds_query(
     unbonds: &Unbonds,
     slashes: &[Slash],
     epoch: Epoch,
-    source: Option<&Address>,
     total: Option<Amount>,
     total_withdrawable: Option<Amount>,
 ) -> (Amount, Amount) {
@@ -784,7 +761,7 @@ fn process_unbonds_query(
                 Some(withdraw_epoch),
             );
             current_total += delta;
-            if epoch > epoch_end {
+            if u64::from(epoch) > u64::from(epoch_end) { //FIXME: From is not public, can't use here
                 withdrawable += delta;
             }
         }
@@ -798,9 +775,9 @@ fn process_unbonds_query(
 pub async fn query_storage_value<C, T>(
     client: C,
     key: Key,
-) -> Result<Option<T>, QueryError>
+) -> Result<Option<T>>
 where
-    C: Client,
+    C: Client + Sync,
     T: BorshDeserialize, 
 {
     let path = Path::Value(key);
@@ -808,7 +785,8 @@ where
     let response = client
         .abci_query(Some(path.into()), data, None, false)
         .await
-        .unwrap();
+        .map_err(|_| QueryError::ABCIQueryError)?;
+
     match response.code {
         Code::Ok => match T::try_from_slice(&response.value[..]) {
             Ok(value) => Ok(Some(value)),
@@ -822,12 +800,12 @@ where
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-pub async fn query_storage_prefix<C, K, T>(
+async fn query_storage_prefix<C, K, T>(
     client: C,
     key: Key,
-) -> Result<Option<K>, QueryError>
+) -> Result<Option<K>>
 where
-    C: Client,
+    C: Client + Sync,
     K: Iterator<Item = (Key, T)>,
     T: BorshDeserialize,
 {
@@ -836,7 +814,8 @@ where
     let response = client
         .abci_query(Some(path.into()), data, None, false)
         .await
-        .unwrap();
+        .map_err(|_| QueryError::ABCIQueryError)?;
+
     match response.code {
         Code::Ok => {
             match Vec::<PrefixValue>::try_from_slice(&response.value[..]) {
@@ -847,7 +826,7 @@ where
                             Ok(value) => Some((key, value)),
                         }
                     };
-                    Some(values.into_iter().filter_map(decode))
+                    Ok(Some(values.into_iter().filter_map(decode)))
                 }
                 Err(err) => Err(QueryError::Decoding(err)),
             }
@@ -858,18 +837,18 @@ where
 }
 
 /// Query to check if the given storage key exists.
-
-pub async fn query_has_storage_key<C>(
+async fn query_has_storage_key<C>(
     client: C,
     key: Key,
-) -> Result<bool, QueryError> 
-where C: Client{
+) -> Result<bool> 
+where C: Client + Sync{
     let path = Path::HasKey(key);
     let data = vec![];
     let response = client
         .abci_query(Some(path.into()), data, None, false)
         .await
-        .unwrap();
+        .map_err(|_| QueryError::ABCIQueryError)?;
+
     match response.code {
         Code::Ok => match bool::try_from_slice(&response.value[..]) {
             Ok(value) => Ok(value),
@@ -880,30 +859,32 @@ where C: Client{
 }
 
 /// Lookup the full response accompanying the specified transaction event
-
-pub async fn query_tx_respons<C>(
+async fn query_tx_response<C>(
     client: C,
     tx_query: TxEventQuery,
-) -> Result<TxResponse, QueryError>
-where C: Client {
+) -> Result<TxResponse>
+where C: Client + Sync {
     // Find all blocks that apply a transaction with the specified hash
     let blocks = client
         .block_search(Query::from(tx_query.clone()), 1, 255, Order::Ascending)
         .await
-        .expect("Unable to query for transaction with given hash")
+        .map_err(|_| QueryError::TransactionNotFound)?
         .blocks;
+
     // Get the block results corresponding to a block to which
     // the specified transaction belongs
-    let block = blocks
+    let block = &blocks
         .get(0)
         .ok_or_else(|| {
             QueryError::BlockNotFound
         })?
         .block;
+
     let response_block_results = client
         .block_results(block.header.height)
         .await
-        .expect("Unable to retrieve block containing transaction");
+        .map_err(|_| QueryError::BlockNotFound)?;
+
     // Search for the event where the specified transaction is
     // applied to the blockchain
     let query_event_opt =
@@ -945,13 +926,13 @@ where C: Client {
 
 /// Lookup the results of applying the specified transaction to the
 /// blockchain.
-
-pub async fn query_tx_result<C>(client: C, tx_hash: T) -> Result<TxQueryResult, QueryError>
-where C: Client, T: Into<String> {
+pub async fn query_tx_result<C, T>(client: C, tx_hash: T) -> Result<TxQueryResult>
+where C: Client + Clone + Sync, T: Into<String> {
     // First try looking up application event pertaining to given hash.
+    let tx_hash: String = tx_hash.into();
     let tx_response = query_tx_response(
         client.clone(),
-        TxEventQuery::Applied(tx_hash.into().clone()),
+        TxEventQuery::Applied(tx_hash.clone()),
     )
     .await;
 
@@ -961,7 +942,7 @@ where C: Client, T: Into<String> {
             // If this fails then instead look for an acceptance event.
             let tx_response = query_tx_response(
                 client,
-                TxEventQuery::Accepted(tx_hash.into()),
+                TxEventQuery::Accepted(tx_hash),
             )
             .await?;
             Ok(TxQueryResult::Accepted(tx_response))

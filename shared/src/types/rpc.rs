@@ -2,6 +2,8 @@
 
 // TODO: fixes imports
 // TODO: remove print and move them where the functions are called
+// TODO: remove safe exits
+// TODO: check which elements should be public
 
 use std::fmt::Display;
 use std::str::FromStr;
@@ -206,43 +208,3 @@ impl TxResponse {
     }
 }
 
-/// Represents a query for an event pertaining to the specified transaction
-
-#[derive(Debug, Clone)]
-pub enum TxEventQuery {
-    Accepted(String),
-    Applied(String),
-}
-
-impl TxEventQuery {
-    /// The event type to which this event query pertains
-    fn event_type(&self) -> &'static str {
-        match self {
-            TxEventQuery::Accepted(_tx_hash) => "accepted",
-            TxEventQuery::Applied(_tx_hash) => "applied",
-        }
-    }
-
-    /// The transaction to which this event query pertains
-    fn tx_hash(&self) -> &String {
-        match self {
-            TxEventQuery::Accepted(tx_hash) => tx_hash,
-            TxEventQuery::Applied(tx_hash) => tx_hash,
-        }
-    }
-}
-
-/// Transaction event queries are semantically a subset of general queries
-
-impl From<TxEventQuery> for Query {
-    fn from(tx_query: TxEventQuery) -> Self {
-        match tx_query {
-            TxEventQuery::Accepted(tx_hash) => {
-                Query::default().and_eq("accepted.hash", tx_hash)
-            }
-            TxEventQuery::Applied(tx_hash) => {
-                Query::default().and_eq("applied.hash", tx_hash)
-            }
-        }
-    }
-}

@@ -29,7 +29,7 @@ pub async fn find_keypair(
                 addr.encode()
             );
             let public_key = rpc::get_public_key(client.clone(), addr)
-                .await;
+                .await.unwrap();
             public_key.unwrap_or_else(|| {
                     eprintln!(
                         "No public key found for the address {}",

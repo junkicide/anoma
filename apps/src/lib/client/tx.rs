@@ -73,8 +73,7 @@ pub async fn submit_update_vp(ctx: Context, args: args::TxUpdateVp) {
     // Check that the address is established and exists on chain
     match &addr {
         Address::Established(_) => {
-            let exists =
-                rpc::known_address(client.clone(), &addr).await;
+            let exists = rpc::known_address(client.clone(), &addr).await.unwrap();
             if !exists {
                 eprintln!("The address {} doesn't exist on chain.", addr);
                 if !args.tx.force {
@@ -255,7 +254,7 @@ pub async fn submit_init_validator(
                     // We need to find out which address is which
                     let (validator_address, rewards_address) =
                         match rpc::is_validator(client.clone(), account_1)
-                            .await
+                            .await.unwrap()
                         {
                             true => (account_1, account_2),
                             false => (account_2, account_1)
@@ -352,7 +351,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let client = HttpClient::new(args.tx.ledger_address).unwrap();
     // Check that the source address exists on chain
     let source_exists =
-        rpc::known_address(client.clone(), &source).await;
+        rpc::known_address(client.clone(), &source).await.unwrap();
     if !source_exists {
         eprintln!("The source address {} doesn't exist on chain.", source);
         if !args.tx.force {
@@ -362,7 +361,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let target = ctx.get(&args.target);
     // Check that the target address exists on chain
     let target_exists =
-        rpc::known_address(client.clone(), &target).await;
+        rpc::known_address(client.clone(), &target).await.unwrap();
     if !target_exists {
         eprintln!("The target address {} doesn't exist on chain.", target);
         if !args.tx.force {
@@ -372,7 +371,7 @@ pub async fn submit_transfer(ctx: Context, args: args::TxTransfer) {
     let token = ctx.get(&args.token);
     // Check that the token address exists on chain
     let token_exists =
-        rpc::known_address(client.clone(), &token).await;
+        rpc::known_address(client.clone(), &token).await.unwrap();
     if !token_exists {
         eprintln!("The token address {} doesn't exist on chain.", token);
         if !args.tx.force {
@@ -433,7 +432,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     let validator = ctx.get(&args.validator);
     let client = HttpClient::new(args.tx.ledger_address).unwrap();
     // Check that the validator address exists on chain
-    let is_validator = rpc::is_validator(client.clone(), &validator).await;
+    let is_validator = rpc::is_validator(client.clone(), &validator).await.unwrap();
     if !is_validator {
         eprintln!(
             "The address {} doesn't belong to any known validator account.",
@@ -447,7 +446,7 @@ pub async fn submit_bond(ctx: Context, args: args::Bond) {
     // Check that the source address exists on chain
     if let Some(source) = &source {
         let source_exists =
-            rpc::known_address(client.clone(), source).await;
+            rpc::known_address(client.clone(), source).await.unwrap();
         if !source_exists {
             eprintln!("The source address {} doesn't exist on chain.", source);
             if !args.tx.force {
@@ -508,7 +507,7 @@ pub async fn submit_unbond(ctx: Context, args: args::Unbond) {
     let validator = ctx.get(&args.validator);
     let client = HttpClient::new(args.tx.ledger_address).unwrap();
     // Check that the validator address exists on chain
-    let is_validator = rpc::is_validator(client.clone(), &validator).await;
+    let is_validator = rpc::is_validator(client.clone(), &validator).await.unwrap();
     if !is_validator {
         eprintln!(
             "The address {} doesn't belong to any known validator account.",
@@ -595,7 +594,7 @@ pub async fn submit_withdraw(ctx: Context, args: args::Withdraw) {
     let validator = ctx.get(&args.validator);
     // Check that the validator address exists on chain
     let is_validator =
-        rpc::is_validator(client.clone(), &validator).await;
+        rpc::is_validator(client.clone(), &validator).await.unwrap();
     if !is_validator {
         eprintln!(
             "The address {} doesn't belong to any known validator account.",
@@ -713,7 +712,7 @@ async fn process_tx(
     let client = HttpClient::new(args.ledger_address.clone()).unwrap();
 
     if args.dry_run {
-        let response = rpc::dry_run_tx(client, tx.to_bytes()).await;
+        let response = rpc::dry_run_tx(client, tx.to_bytes()).await.unwrap();
         println!("{:#?}", response);
         (ctx, vec![])
     } else {
