@@ -70,7 +70,7 @@ dependencies = [
  "rust_decimal",
  "serde",
  "serde_json",
- "sha2",
+ "sha2 0.9.9",
  "sparse-merkle-tree",
  "tempfile",
  "tendermint",
@@ -115,7 +115,7 @@ dependencies = [
  "ibc-proto",
  "prost",
  "serde_json",
- "sha2",
+ "sha2 0.9.9",
  "tempfile",
  "tendermint",
  "tendermint-proto",
@@ -129,6 +129,7 @@ name = "anoma_tx_prelude"
 version = "0.4.0"
 dependencies = [
  "anoma_vm_env",
+ "sha2 0.10.1",
 ]
 
 [[package]]
@@ -138,6 +139,7 @@ dependencies = [
  "anoma",
  "anoma_macros",
  "borsh",
+ "hex",
 ]
 
 [[package]]
@@ -145,6 +147,7 @@ name = "anoma_vp_prelude"
 version = "0.4.0"
 dependencies = [
  "anoma_vm_env",
+ "sha2 0.10.1",
 ]
 
 [[package]]
@@ -745,7 +748,7 @@ dependencies = [
  "rand 0.7.3",
  "serde",
  "serde_bytes",
- "sha2",
+ "sha2 0.9.9",
  "zeroize",
 ]
 
@@ -1119,7 +1122,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
- "sha2",
+ "sha2 0.9.9",
  "subtle-encoding",
  "tendermint",
  "tendermint-light-client",
@@ -1153,7 +1156,7 @@ dependencies = [
  "hex",
  "prost",
  "ripemd160",
- "sha2",
+ "sha2 0.9.9",
  "sha3",
  "sp-std",
 ]
@@ -2148,6 +2151,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha2"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99c3bd8169c58782adad9290a9af5939994036b76187f7b4f0e6de91dbbfc0ec"
+dependencies = [
+ "cfg-if 1.0.0",
+ "cpufeatures",
+ "digest 0.10.1",
+]
+
+[[package]]
 name = "sha3"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2216,7 +2230,7 @@ dependencies = [
  "borsh",
  "cfg-if 1.0.0",
  "ics23",
- "sha2",
+ "sha2 0.9.9",
 ]
 
 [[package]]
@@ -2315,7 +2329,7 @@ dependencies = [
  "serde_bytes",
  "serde_json",
  "serde_repr",
- "sha2",
+ "sha2 0.9.9",
  "signature",
  "subtle",
  "subtle-encoding",
