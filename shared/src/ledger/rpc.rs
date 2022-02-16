@@ -56,7 +56,7 @@ use crate::types::storage::{Epoch, Key};
 use crate::types::{address, storage, token};
 
 
-// FIXME: add causing Errors to this ones? Or implement from
+// FIXME: add causing Errors to this ones? Or implement from and remove map_err
 #[derive(Debug, Error)]
 pub enum QueryError {
     #[error("Abci query failed")]
@@ -135,28 +135,15 @@ pub struct BondQueryResult { //FIXME: improve this struct
 
 pub struct SlashQueryResult(HashMap<Address, Vec<Slash>>); // TODO: implement getter for this
 
+
 /// Represents the result of a balance query. First Address is the Owner one,
 /// nested Address is the token one.
-pub struct BalanceQueryResult(HashMap<Address, HashMap<Address, Amount>>); //FIXME: Or HashMap<(Adress, Address), Amount> ?
+#[derive(Default)]
+pub struct BalanceQueryResult(HashMap<Address, HashMap<Address, Amount>>);
 
 impl BalanceQueryResult {
-    fn new() -> Self {
-        BalanceQueryResult(HashMap::new())
-    }
-
-    /// Update the given keys if exist, otherwise insert them
     fn insert(&mut self, owner: Address, token: Address, balance: Amount) {
-        match self.0.get_mut(&owner) { //FIXME: deref?
-            // FIXME: improve this block
-            Some(token_map) => {
-                token_map.insert(token, balance);
-            }
-            None => {
-                let token_map = HashMap::new();
-                token_map.insert(token, balance);
-                self.insert(owner, token_map);
-            }
-        }
+        self.0.insert(owner, token, balance);
     }
 
     pub fn get_balance(
@@ -164,9 +151,9 @@ impl BalanceQueryResult {
         owner: &Address,
         token: &Address,
     ) -> Option<Amount> {
-        match self.0.get(owner) { //FIXME: deref?
-            Some(token) => Some(self.0.get(token).clone()),
-            None => None,
+        match self.0.get(owner) {
+            Some(inner) => inner.get(token).unwrap(),
+            None => None
         }
     }
 }
@@ -210,7 +197,7 @@ pub async fn query_balance<C>(
 ) -> Result<BalanceQueryResult>
 where C: Client + Clone + Sync {
     let tokens = address::tokens();
-    let result = BalanceQueryResult::new();
+    let mut result = BalanceQueryResult::new();
     match (token, owner) {
         (Some(token), Some(owner)) => {
             let key = token::balance_key(token, owner);
@@ -239,7 +226,7 @@ where C: Client + Clone + Sync {
         (Some(token), None) => {
             let key = token::balance_prefix(token);
             if let Some(balances) =
-                query_storage_prefix::<C, _, Amount>(client, key).await?
+                query_storage_prefix::<C, Amount>(client, key).await?
             {
                 let currency_code = tokens
                     .get(token)
@@ -255,7 +242,7 @@ where C: Client + Clone + Sync {
             for (token, currency_code) in tokens {
                 let key = token::balance_prefix(&token);
                 if let Some(balances) =
-                    query_storage_prefix::<C, _, Amount>(client.clone(), key)
+                    query_storage_prefix::<C, Amount>(client.clone(), key)
                         .await?
                 {
                     for (key, balance) in balances {
@@ -300,7 +287,7 @@ where C: Client + Clone + Sync  {
 
             if let Some(bonds) = &bonds {
                 let (t, a) = process_bonds_query(
-                    bonds, &slashes, epoch, None, None, None,
+                    bonds, &slashes, epoch, None, None,
                 );
                 result.bonds = t;
                 result.active = a;
@@ -308,7 +295,7 @@ where C: Client + Clone + Sync  {
 
             if let Some(unbonds) = &unbonds {
                 let (t, w) = process_unbonds_query(
-                    unbonds, &slashes, epoch, None, None, None,
+                    unbonds, &slashes, epoch, None, None,
                 );
                 result.unbonds = t;
                 result.withdrawable = w;
@@ -338,7 +325,7 @@ where C: Client + Clone + Sync  {
 
             if let Some(bonds) = &bonds {
                 let (b, a) = process_bonds_query(
-                    bonds, &slashes, epoch, None, None, None,
+                    bonds, &slashes, epoch, None, None,
                 );
                 result.bonds = b;
                 result.active = a;
@@ -346,7 +333,7 @@ where C: Client + Clone + Sync  {
 
             if let Some(unbonds) = &unbonds {
                 let (u, w) = process_unbonds_query(
-                    unbonds, &slashes, epoch, None, None, None,
+                    unbonds, &slashes, epoch, None, None,
                 );
                 result.unbonds = u;
                 result.withdrawable = w;
@@ -355,14 +342,14 @@ where C: Client + Clone + Sync  {
         (Some(owner), None) => {
             // Find owner's bonds to any validator
             let bonds_prefix = pos::bonds_for_source_prefix(&owner);
-            let bonds = query_storage_prefix::<C, _, pos::Bonds>(
+            let bonds = query_storage_prefix::<C, pos::Bonds>(
                 client.clone(),
                 bonds_prefix,
             )
             .await?;
             // Find owner's unbonds to any validator
             let unbonds_prefix = pos::unbonds_for_source_prefix(&owner);
-            let unbonds = query_storage_prefix::<C, _, pos::Unbonds>(
+            let unbonds = query_storage_prefix::<C, pos::Unbonds>(
                 client.clone(),
                 unbonds_prefix,
             )
@@ -386,7 +373,6 @@ where C: Client + Clone + Sync  {
                                 &bonds,
                                 &slashes,
                                 epoch,
-                                Some(&source),
                                 Some(result.bonds),
                                 Some(result.active),
                             );
@@ -418,7 +404,6 @@ where C: Client + Clone + Sync  {
                                 &unbonds,
                                 &slashes,
                                 epoch,
-                                Some(&source),
                                 Some(result.unbonds),
                                 Some(result.withdrawable),
                             );
@@ -435,14 +420,14 @@ where C: Client + Clone + Sync  {
         (None, None) => {
             // Find all the bonds
             let bonds_prefix = pos::bonds_prefix();
-            let bonds = query_storage_prefix::<C, _, pos::Bonds>(
+            let bonds = query_storage_prefix::<C, pos::Bonds>(
                 client.clone(),
                 bonds_prefix,
             )
             .await?;
             // Find all the unbonds
             let unbonds_prefix = pos::unbonds_prefix();
-            let unbonds = query_storage_prefix::<C, _, pos::Unbonds>(
+            let unbonds = query_storage_prefix::<C, pos::Unbonds>(
                 client.clone(),
                 unbonds_prefix,
             )
@@ -466,7 +451,6 @@ where C: Client + Clone + Sync  {
                                 &bonds,
                                 &slashes,
                                 epoch,
-                                Some(&source),
                                 Some(result.bonds),
                                 Some(result.active),
                             );
@@ -498,7 +482,6 @@ where C: Client + Clone + Sync  {
                                 &unbonds,
                                 &slashes,
                                 epoch,
-                                Some(&source),
                                 Some(result.unbonds),
                                 Some(result.withdrawable),
                             );
@@ -526,18 +509,6 @@ where C: Client + Clone + Sync {
         None => query_epoch(client.clone()).await?,
     };
 
-    // Find the validator set
-    let validator_set_key = pos::validator_set_key();
-    let validator_sets = query_storage_value::<C, pos::ValidatorSets>(
-        client.clone(),
-        validator_set_key,
-    )
-    .await?;
-    let validator_set = validator_sets
-        .get(epoch)
-        .ok_or()
-        .map_err(|_| QueryError::UnsetValidator)?;
-
     match validator {
         Some(validator) => {
             // Find voting power for the given validator
@@ -552,30 +523,28 @@ where C: Client + Clone + Sync {
                 Some(voting_power_delta) => {
                     let voting_power: VotingPower =
                         voting_power_delta.try_into().map_err(|_| QueryError::NegativeVotingPowerDeltas)?;
-                    let weighted = WeightedValidator {
-                        address: validator.to_owned(),
-                        voting_power,
-                    };
                     Ok(Some(voting_power))
                 }
-                None => {
-                    Ok(None)
-                }
+                None => Ok(None)
             }
         }
         None => {
+            // Find total voting power
             let total_voting_power_key = pos::total_voting_power_key();
             let total_voting_powers = query_storage_value::<C, pos::TotalVotingPowers>(
                 client,
                 total_voting_power_key,
             )
-            .await?;
-            let total_voting_power = total_voting_powers
-                .get(epoch)
-                .ok_or()
-                .map_err(|_| QueryError::UnsetVotingPower)?;
+            .await?
+            .ok_or(QueryError::UnsetVotingPower)?;
 
-            Ok(Some(total_voting_power))
+            match total_voting_powers.get(epoch) {
+                Some(total_voting_power_delta) => {
+                    let total_voting_power = total_voting_power_delta.try_into().map_err(|_| QueryError::NegativeVotingPowerDeltas)?;
+                    Ok(Some(total_voting_power))
+                },
+                None => Ok(None)
+            }
         }
     }
 }
@@ -585,7 +554,7 @@ where C: Client + Clone + Sync {
 /// the slashes for all the validators.
 pub async fn query_slashes<C>(client: C, validator: Option<&Address>) -> Result<Option<SlashQueryResult>>
 where C: Client + Clone + Sync {
-    let result: SlashQueryResult;
+    let mut result: SlashQueryResult;
     match validator {
         Some(validator) => {
             // Find slashes for the given validator
@@ -608,7 +577,7 @@ where C: Client + Clone + Sync {
         None => {
             // Iterate slashes for all validators
             let slashes_prefix = pos::slashes_prefix();
-            let slashes = query_storage_prefix::<C, _, pos::Slashes>(
+            let slashes = query_storage_prefix::<C, pos::Slashes>(
                 client.clone(),
                 slashes_prefix,
             )
@@ -725,7 +694,7 @@ fn process_bonds_query(
             delta = apply_slashes(slashes, delta, *epoch_start, None);
             current_total += delta;
 
-            if epoch >= *epoch_start {
+            if epoch > (*epoch_start).into() {
                 total_active += delta;
             }
         }
@@ -761,7 +730,7 @@ fn process_unbonds_query(
                 Some(withdraw_epoch),
             );
             current_total += delta;
-            if u64::from(epoch) > u64::from(epoch_end) { //FIXME: From is not public, can't use here
+            if epoch > (*epoch_end).into() {
                 withdrawable += delta;
             }
         }
@@ -800,13 +769,12 @@ where
 /// Query a range of storage values with a matching prefix and decode them with
 /// [`BorshDeserialize`]. Returns an iterator of the storage keys paired with
 /// their associated values.
-async fn query_storage_prefix<C, K, T>(
+async fn query_storage_prefix<C, T>(
     client: C,
     key: Key,
-) -> Result<Option<K>>
+) -> Result<Option<impl Iterator<Item = (Key, T)>>>
 where
     C: Client + Sync,
-    K: Iterator<Item = (Key, T)>,
     T: BorshDeserialize,
 {
     let path = Path::Prefix(key);
