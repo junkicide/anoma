@@ -316,9 +316,9 @@ pub mod vp {
     use core::slice;
     use std::convert::TryFrom;
     use std::marker::PhantomData;
-    
+
     use anoma::types::chain::CHAIN_ID_LENGTH;
-    use anoma::types::hash::{HASH_LENGTH, Hash};
+    use anoma::types::hash::{Hash, HASH_LENGTH};
     use anoma::types::internal::HostEnvResult;
     use anoma::types::key::ed25519::{PublicKey, Signature};
     use anoma::types::storage::{
@@ -460,9 +460,8 @@ pub mod vp {
         unsafe {
             anoma_vp_get_tx_hash(result.as_ptr() as _);
         }
-        let slice = unsafe {
-            slice::from_raw_parts(result.as_ptr(), HASH_LENGTH)
-        };
+        let slice =
+            unsafe { slice::from_raw_parts(result.as_ptr(), HASH_LENGTH) };
         Hash::try_from(slice).expect("Cannot convert the hash")
     }
 

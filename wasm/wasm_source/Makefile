@@ -32,6 +32,9 @@ test:
 clippy:
 	$(foreach wasm,$(wasms),make clippy_$(wasm) && ) true
 
+clippy-fix:
+	$(cargo) +$(nightly) clippy --fix -Z unstable-options --all-targets --allow-dirty --allow-staged
+
 fmt:
 	$(cargo) +$(nightly) fmt --all
 

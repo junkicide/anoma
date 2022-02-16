@@ -131,14 +131,13 @@ fn validate_tx(
             let has_post: bool = has_key_post(&key);
             if owner == &addr {
                 if has_post {
-                    let vp: Vec<u8> = read_post(&key).unwrap();
+                    let vp: Vec<u8> = read_bytes_post(&key).unwrap();
                     return *valid_sig && is_vp_whitelisted(&vp);
                 } else {
                     return false;
                 }
             } else {
-                let vp: Vec<u8> = read_post(&key).unwrap();
-                return is_vp_whitelisted(&vp);
+                return true;
             }
         } else {
             debug_log!("Unknown key modified, valid sig {}", *valid_sig);
@@ -179,7 +178,8 @@ fn is_vp_whitelisted(vp_bytes: &[u8]) -> bool {
     let key = parameters::vp_whitelist_storage_key();
     let whitelist: Vec<String> = read_pre(&key.to_string()).unwrap_or_default();
     // if whitelist is empty, allow any transaction
-    return whitelist.contains(&vp_hash.to_string()) || whitelist.len() == 0;
+    return whitelist.clone().contains(&vp_hash.to_string())
+        || whitelist.len() == 0;
 }
 
 fn try_decode_intent(
@@ -600,6 +600,7 @@ mod tests {
     fn test_signed_vp_update_accepted() {
         // Initialize a tx environment
         let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, None, None);
 
         let vp_owner = address::testing::established_address_1();
         let keypair = key::ed25519::testing::keypair_1();
@@ -620,6 +621,155 @@ mod tests {
             });
 
         let tx = vp_env.tx.clone();
+        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
+        vp_env.tx = signed_tx;
+        let keys_changed: HashSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: HashSet<Address> = HashSet::default();
+        assert!(validate_tx(tx_data, vp_owner, keys_changed, verifiers));
+    }
+
+    /// Test that a validity predicate update is rejected if not whitelisted
+    #[test]
+    fn test_signed_vp_update_not_whitelisted_rejected() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+        tx_env.init_parameters(None, Some(vec!["some_hash".to_string()]), None);
+
+        let vp_owner = address::testing::established_address_1();
+        let keypair = key::ed25519::testing::keypair_1();
+        let public_key = &keypair.public;
+        let vp_code =
+            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner]);
+
+        tx_env.write_public_key(&vp_owner, public_key);
+
+        // Initialize VP environment from a transaction
+        let mut vp_env =
+            init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+                // Update VP in a transaction
+                tx_host_env::update_validity_predicate(address, &vp_code);
+            });
+
+        let tx = vp_env.tx.clone();
+        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
+        vp_env.tx = signed_tx;
+        let keys_changed: HashSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: HashSet<Address> = HashSet::default();
+        assert!(!validate_tx(tx_data, vp_owner, keys_changed, verifiers));
+    }
+
+    /// Test that a validity predicate update is accepted if whitelisted
+    #[test]
+    fn test_signed_vp_update_whitelisted_accepted() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+
+        let vp_owner = address::testing::established_address_1();
+        let keypair = key::ed25519::testing::keypair_1();
+        let public_key = &keypair.public;
+        let vp_code =
+            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+
+        let vp_hash = sha256(&vp_code);
+        tx_env.init_parameters(None, Some(vec![vp_hash.to_string()]), None);
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner]);
+
+        tx_env.write_public_key(&vp_owner, public_key);
+
+        // Initialize VP environment from a transaction
+        let mut vp_env =
+            init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+                // Update VP in a transaction
+                tx_host_env::update_validity_predicate(address, &vp_code);
+            });
+
+        let tx = vp_env.tx.clone();
+        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
+        vp_env.tx = signed_tx;
+        let keys_changed: HashSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: HashSet<Address> = HashSet::default();
+        assert!(validate_tx(tx_data, vp_owner, keys_changed, verifiers));
+    }
+
+    /// Test that a tx is rejected if not whitelisted
+    #[test]
+    fn test_tx_not_whitelisted_rejected() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+
+        let vp_owner = address::testing::established_address_1();
+        let keypair = key::ed25519::testing::keypair_1();
+        let public_key = &keypair.public;
+        let vp_code =
+            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+
+        let vp_hash = sha256(&vp_code);
+        tx_env.init_parameters(
+            None,
+            Some(vec![vp_hash.to_string()]),
+            Some(vec!["some_hash".to_string()]),
+        );
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner]);
+
+        tx_env.write_public_key(&vp_owner, public_key);
+
+        // Initialize VP environment from a transaction
+        let mut vp_env =
+            init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+                // Update VP in a transaction
+                tx_host_env::update_validity_predicate(address, &vp_code);
+            });
+
+        let tx = vp_env.tx.clone();
+        let signed_tx = key::ed25519::sign_tx(&keypair, tx);
+        let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
+        vp_env.tx = signed_tx;
+        let keys_changed: HashSet<storage::Key> =
+            vp_env.all_touched_storage_keys();
+        let verifiers: HashSet<Address> = HashSet::default();
+        assert!(!validate_tx(tx_data, vp_owner, keys_changed, verifiers));
+    }
+
+    #[test]
+    fn test_tx_whitelisted_accepted() {
+        // Initialize a tx environment
+        let mut tx_env = TestTxEnv::default();
+
+        let vp_owner = address::testing::established_address_1();
+        let keypair = key::ed25519::testing::keypair_1();
+        let public_key = &keypair.public;
+        let vp_code =
+            std::fs::read(VP_ALWAYS_TRUE_WASM).expect("cannot load wasm");
+
+        tx_env.init_parameters(None, None, Some(vec!["E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855".to_string()]));
+
+        // Spawn the accounts to be able to modify their storage
+        tx_env.spawn_accounts([&vp_owner]);
+
+        tx_env.write_public_key(&vp_owner, public_key);
+
+        // Initialize VP environment from a transaction
+        let mut vp_env =
+            init_vp_env_from_tx(vp_owner.clone(), tx_env, |address| {
+                // Update VP in a transaction
+                tx_host_env::update_validity_predicate(address, &vp_code);
+            });
+
+        let tx = vp_env.tx.clone();
+        println!("code {}", sha256(&tx.code.clone()));
         let signed_tx = key::ed25519::sign_tx(&keypair, tx);
         let tx_data: Vec<u8> = signed_tx.data.as_ref().cloned().unwrap();
         vp_env.tx = signed_tx;

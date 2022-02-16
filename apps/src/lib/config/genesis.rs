@@ -183,7 +183,7 @@ pub mod genesis_config {
         // Hashes of whitelisted vps array
         pub vp_whitelist: Option<Vec<String>>,
         // Hashes of whitelisted vps array
-        pub tx_whitelist: Option<Vec<String>>
+        pub tx_whitelist: Option<Vec<String>>,
     }
 
     #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -495,7 +495,7 @@ pub struct Genesis {
     pub established_accounts: Vec<EstablishedAccount>,
     pub implicit_accounts: Vec<ImplicitAccount>,
     pub parameters: Parameters,
-    pub pos_params: PosParams
+    pub pos_params: PosParams,
 }
 
 impl Genesis {
@@ -643,7 +643,7 @@ pub fn genesis() -> Genesis {
             min_duration: anoma::types::time::Duration::minutes(1).into(),
         },
         vp_whitelist: vec![],
-        tx_whitelist: vec![]
+        tx_whitelist: vec![],
     };
     let albert = EstablishedAccount {
         address: wallet::defaults::albert_address(),

@@ -5,9 +5,10 @@
 #![deny(rustdoc::private_intra_doc_links)]
 
 use core::convert::AsRef;
-pub use anoma_vm_env::vp_prelude::*;
-pub use sha2::{Sha256, Sha384, Sha512, Digest};
+
 use anoma_vm_env::vp_prelude::hash::Hash;
+pub use anoma_vm_env::vp_prelude::*;
+pub use sha2::{Digest, Sha256, Sha384, Sha512};
 
 pub fn sha256(bytes: &[u8]) -> Hash {
     let digest = Sha256::digest(bytes);
